@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dumbbell } from "lucide-react";
+import { Dumbbell, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
 
 const objectives = [
   { value: "perder-peso", label: "Perder peso" },
@@ -22,6 +25,8 @@ const activityLevels = [
 
 export default function OnboardingForm() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     peso: "",
     altura: "",
@@ -34,10 +39,33 @@ export default function OnboardingForm() {
 
   const update = (field: string, value: string) => setForm((f) => ({ ...f, [field]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Store in localStorage for now, later will use DB
-    localStorage.setItem("fitai_profile", JSON.stringify(form));
+    if (!user) {
+      toast({ title: "Debes iniciar sesión", variant: "destructive" });
+      navigate("/login");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.from("profiles").update({
+      peso: parseFloat(form.peso),
+      altura: parseFloat(form.altura),
+      edad: parseInt(form.edad),
+      genero: form.genero,
+      objetivo: form.objetivo,
+      actividad: form.actividad,
+      dias: parseInt(form.dias),
+      updated_at: new Date().toISOString(),
+    }).eq("id", user.id);
+
+    setLoading(false);
+
+    if (error) {
+      toast({ title: "Error guardando perfil", description: error.message, variant: "destructive" });
+      return;
+    }
+
     navigate("/dashboard");
   };
 
@@ -52,9 +80,7 @@ export default function OnboardingForm() {
 
         <div className="glass-card rounded-2xl p-8">
           <h1 className="mb-1 font-display text-2xl font-bold">Cuéntanos sobre ti</h1>
-          <p className="mb-6 text-sm text-muted-foreground">
-            Necesitamos estos datos para generar tu plan personalizado
-          </p>
+          <p className="mb-6 text-sm text-muted-foreground">Necesitamos estos datos para generar tu plan personalizado</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-2 gap-4">
@@ -116,8 +142,8 @@ export default function OnboardingForm() {
               </Select>
             </div>
 
-            <Button type="submit" className="w-full" size="lg">
-              Generar mi plan con IA
+            <Button type="submit" className="w-full" size="lg" disabled={loading}>
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Guardando...</> : "Generar mi plan con IA"}
             </Button>
           </form>
         </div>
