@@ -14,7 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      generated_plans: {
+        Row: {
+          content: Json
+          created_at: string
+          id: string
+          plan_type: string
+          user_id: string
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          id?: string
+          plan_type: string
+          user_id: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          id?: string
+          plan_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          actividad: string | null
+          altura: number | null
+          created_at: string
+          dias: number | null
+          edad: number | null
+          genero: string | null
+          id: string
+          is_subscribed: boolean
+          name: string | null
+          objetivo: string | null
+          peso: number | null
+          updated_at: string
+        }
+        Insert: {
+          actividad?: string | null
+          altura?: number | null
+          created_at?: string
+          dias?: number | null
+          edad?: number | null
+          genero?: string | null
+          id: string
+          is_subscribed?: boolean
+          name?: string | null
+          objetivo?: string | null
+          peso?: number | null
+          updated_at?: string
+        }
+        Update: {
+          actividad?: string | null
+          altura?: number | null
+          created_at?: string
+          dias?: number | null
+          edad?: number | null
+          genero?: string | null
+          id?: string
+          is_subscribed?: boolean
+          name?: string | null
+          objetivo?: string | null
+          peso?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
