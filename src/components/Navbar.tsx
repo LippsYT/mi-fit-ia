@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Dumbbell } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Navbar() {
+  const { user } = useAuth();
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/30 bg-background/80 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 items-center justify-between section-padding">
@@ -13,12 +16,20 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <Link to="/login">
-            <Button variant="ghost" size="sm">Iniciar sesión</Button>
-          </Link>
-          <Link to="/registro">
-            <Button size="sm">Empezar ahora</Button>
-          </Link>
+          {user ? (
+            <Link to="/dashboard">
+              <Button size="sm">Mi panel</Button>
+            </Link>
+          ) : (
+            <>
+              <Link to="/login">
+                <Button variant="ghost" size="sm">Iniciar sesión</Button>
+              </Link>
+              <Link to="/registro">
+                <Button size="sm">Empezar ahora</Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>
