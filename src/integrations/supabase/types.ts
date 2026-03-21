@@ -78,41 +78,86 @@ export type Database = {
         };
         Relationships: [];
       };
+      ai_consultations: {
+        Row: {
+          action_steps: Json;
+          answer: string;
+          consultation_type: string;
+          context_payload: Json;
+          created_at: string;
+          id: string;
+          question: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          action_steps?: Json;
+          answer: string;
+          consultation_type?: string;
+          context_payload?: Json;
+          created_at?: string;
+          id?: string;
+          question: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          action_steps?: Json;
+          answer?: string;
+          consultation_type?: string;
+          context_payload?: Json;
+          created_at?: string;
+          id?: string;
+          question?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       nutrition_logs: {
         Row: {
+          ai_summary: string | null;
           calories: number;
           carbs: number;
           created_at: string;
           eaten_at: string;
           fats: number;
+          food_description: string | null;
           id: string;
           meal_name: string;
+          meal_type: string | null;
           notes: string | null;
           protein: number;
           updated_at: string;
           user_id: string;
         };
         Insert: {
+          ai_summary?: string | null;
           calories?: number;
           carbs?: number;
           created_at?: string;
           eaten_at?: string;
           fats?: number;
+          food_description?: string | null;
           id?: string;
           meal_name: string;
+          meal_type?: string | null;
           notes?: string | null;
           protein?: number;
           updated_at?: string;
           user_id: string;
         };
         Update: {
+          ai_summary?: string | null;
           calories?: number;
           carbs?: number;
           created_at?: string;
           eaten_at?: string;
           fats?: number;
+          food_description?: string | null;
           id?: string;
           meal_name?: string;
+          meal_type?: string | null;
           notes?: string | null;
           protein?: number;
           updated_at?: string;
@@ -156,6 +201,39 @@ export type Database = {
           user_id?: string;
           waist?: number | null;
           weight?: number | null;
+        };
+        Relationships: [];
+      };
+      workout_progress: {
+        Row: {
+          completed: boolean;
+          completed_at: string | null;
+          created_at: string;
+          id: string;
+          plan_id: string;
+          updated_at: string;
+          user_id: string;
+          workout_day: string;
+        };
+        Insert: {
+          completed?: boolean;
+          completed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          plan_id: string;
+          updated_at?: string;
+          user_id: string;
+          workout_day: string;
+        };
+        Update: {
+          completed?: boolean;
+          completed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          plan_id?: string;
+          updated_at?: string;
+          user_id?: string;
+          workout_day?: string;
         };
         Relationships: [];
       };

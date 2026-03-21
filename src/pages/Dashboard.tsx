@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Apple, Calendar, Crown, Dumbbell, Flame, Loader2, Lock, Scale, Sparkles, Target, TrendingUp, User, Utensils } from "lucide-react";
+import { Apple, Bot, Calendar, CheckCircle2, Crown, Dumbbell, Flame, Loader2, Lock, Scale, Sparkles, Target, TrendingUp, User, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,11 +10,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import {
+  answerNutritionConsultation,
+  estimateDailyNutrition,
   generateDietPlan,
   generateWorkoutPlan,
   normalizePlanForStorage,
   normalizePremiumPlan,
+  type DailyMealInput,
   type FitnessProfile,
+  type NutritionConsultation,
   type PremiumPlan,
 } from "@/lib/gemini";
 import { startCheckout } from "@/lib/checkout";
@@ -43,13 +47,16 @@ type SubscriptionRow = {
 };
 
 type NutritionLog = {
+  ai_summary: string | null;
   calories: number;
   carbs: number;
   created_at: string;
   eaten_at: string;
   fats: number;
+  food_description: string | null;
   id: string;
   meal_name: string;
+  meal_type: string | null;
   notes: string | null;
   protein: number;
   updated_at: string;
@@ -84,6 +91,31 @@ type CheckinFormState = {
   weight: string;
 };
 
+type DailyMealFormState = {
+  almuerzo: string;
+  cena: string;
+  desayuno: string;
+  snacks: string;
+};
+
+type AiConsultationRow = {
+  action_steps: string[];
+  answer: string;
+  consultation_type: string;
+  context_payload: Record<string, unknown>;
+  created_at: string;
+  id: string;
+  question: string;
+};
+
+type WorkoutProgressRow = {
+  completed: boolean;
+  completed_at: string | null;
+  id: string;
+  plan_id: string;
+  workout_day: string;
+};
+
 type DailyTargets = {
   calories: number;
   carbs: number;
@@ -110,6 +142,13 @@ const initialCheckinForm: CheckinFormState = {
   notes: "",
   waist: "",
   weight: "",
+};
+
+const initialDailyMealForm: DailyMealFormState = {
+  almuerzo: "",
+  cena: "",
+  desayuno: "",
+  snacks: "",
 };
 
 function isActiveSubscription(subscription: SubscriptionRow | null) {
@@ -201,6 +240,21 @@ function toNumericString(value: number | null | undefined) {
   return value == null ? "" : String(value);
 }
 
+function mealLabel(value: string) {
+  switch (value) {
+    case "desayuno":
+      return "Desayuno";
+    case "almuerzo":
+      return "Almuerzo";
+    case "cena":
+      return "Cena";
+    case "snacks":
+      return "Snacks";
+    default:
+      return "Comida";
+  }
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { loading: authLoading, session, signOut, user } = useAuth();
@@ -210,14 +264,20 @@ export default function Dashboard() {
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null);
   const [nutritionLogs, setNutritionLogs] = useState<NutritionLog[]>([]);
   const [progressCheckins, setProgressCheckins] = useState<ProgressCheckin[]>([]);
+  const [consultations, setConsultations] = useState<AiConsultationRow[]>([]);
+  const [workoutProgress, setWorkoutProgress] = useState<WorkoutProgressRow[]>([]);
   const [activeTab, setActiveTab] = useState<PlanType>("dieta");
   const [loadingData, setLoadingData] = useState(true);
   const [generating, setGenerating] = useState<PlanType | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [mealSaving, setMealSaving] = useState(false);
   const [checkinSaving, setCheckinSaving] = useState(false);
+  const [consultationLoading, setConsultationLoading] = useState(false);
+  const [workoutSaving, setWorkoutSaving] = useState<string | null>(null);
   const [mealForm, setMealForm] = useState<MealFormState>(initialMealForm);
   const [checkinForm, setCheckinForm] = useState<CheckinFormState>(initialCheckinForm);
+  const [dailyMealForm, setDailyMealForm] = useState<DailyMealFormState>(initialDailyMealForm);
+  const [consultationQuestion, setConsultationQuestion] = useState("");
 
   const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
   const activePlan = activeTab === "dieta" ? dietPlan : workoutPlan;
@@ -236,6 +296,21 @@ export default function Dashboard() {
     );
   }, [nutritionLogs]);
   const latestCheckin = progressCheckins[0] ?? null;
+  const latestNutritionFeedback = useMemo(
+    () => consultations.find((item) => item.consultation_type === "nutrition_feedback") ?? null,
+    [consultations],
+  );
+  const quickConsultations = useMemo(
+    () => consultations.filter((item) => item.consultation_type === "quick_question").slice(0, 4),
+    [consultations],
+  );
+  const workoutProgressMap = useMemo(() => {
+    return new Map(
+      workoutProgress
+        .filter((item) => item.plan_id === workoutPlan?.id)
+        .map((item) => [item.workout_day, item]),
+    );
+  }, [workoutPlan?.id, workoutProgress]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -247,7 +322,7 @@ export default function Dashboard() {
     const loadDashboard = async () => {
       setLoadingData(true);
 
-      const [profileResult, plansResult, subscriptionResult, nutritionResult, checkinsResult] = await Promise.all([
+      const [profileResult, plansResult, subscriptionResult, nutritionResult, checkinsResult, consultationsResult, workoutProgressResult] = await Promise.all([
         supabase
           .from("fitness_profiles")
           .select("*")
@@ -274,6 +349,18 @@ export default function Dashboard() {
           .eq("user_id", user.id)
           .order("checkin_date", { ascending: false })
           .limit(6),
+        supabase
+          .from("ai_consultations")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(8),
+        supabase
+          .from("workout_progress")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("updated_at", { ascending: false })
+          .limit(20),
       ]);
 
       if (profileResult.error) {
@@ -291,6 +378,12 @@ export default function Dashboard() {
       if (checkinsResult.error) {
         console.error("Error cargando progress_checkins", checkinsResult.error);
       }
+      if (consultationsResult.error) {
+        console.error("Error cargando ai_consultations", consultationsResult.error);
+      }
+      if (workoutProgressResult.error) {
+        console.error("Error cargando workout_progress", workoutProgressResult.error);
+      }
 
       const nextProfile = (profileResult.data as FitnessProfile | null) ?? null;
       const nextCheckins = (checkinsResult.data as ProgressCheckin[] | null) ?? [];
@@ -299,6 +392,12 @@ export default function Dashboard() {
       setSubscription((subscriptionResult.data as SubscriptionRow | null) ?? null);
       setNutritionLogs((nutritionResult.data as NutritionLog[] | null) ?? []);
       setProgressCheckins(nextCheckins);
+      setConsultations((((consultationsResult.data as any[] | null) ?? [])).map((item) => ({
+        ...item,
+        action_steps: Array.isArray(item.action_steps) ? item.action_steps : [],
+        context_payload: item.context_payload && typeof item.context_payload === "object" ? item.context_payload : {},
+      })));
+      setWorkoutProgress((workoutProgressResult.data as WorkoutProgressRow[] | null) ?? []);
       setCheckinForm((current) => ({
         ...current,
         weight: current.weight || toNumericString(nextCheckins[0]?.weight ?? nextProfile?.weight),
@@ -496,6 +595,109 @@ export default function Dashboard() {
     });
   };
 
+  const handleAnalyzeDailyMeals = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!user || !profile) return;
+    if (!hasPremiumAccess) {
+      toast({
+        title: "Funcion premium",
+        description: "El seguimiento diario con analisis IA se desbloquea con la suscripcion premium.",
+      });
+      return;
+    }
+
+    const meals = Object.fromEntries(
+      Object.entries(dailyMealForm).map(([key, value]) => [key, value.trim()]),
+    ) as DailyMealInput;
+
+    if (!Object.values(meals).some(Boolean)) {
+      toast({
+        title: "Completa tu dia",
+        description: "Escribe al menos una comida para que la IA la analice.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setMealSaving(true);
+
+    try {
+      const analysis = await estimateDailyNutrition(meals, profile, dailyTargets);
+      const rows = analysis.meals.map((meal) => ({
+        user_id: user.id,
+        meal_name: mealLabel(meal.meal_type),
+        meal_type: meal.meal_type,
+        food_description: meal.text,
+        ai_summary: meal.summary,
+        calories: meal.calories,
+        protein: meal.protein,
+        carbs: meal.carbs,
+        fats: meal.fats,
+        notes: null,
+      }));
+
+      const { data: insertedLogs, error: logsError } = await supabase
+        .from("nutrition_logs")
+        .insert(rows)
+        .select("*");
+
+      if (logsError) {
+        throw logsError;
+      }
+
+      const feedbackPayload = {
+        user_id: user.id,
+        consultation_type: "nutrition_feedback",
+        question: "Feedback nutricional del dia",
+        answer: analysis.coach_message,
+        action_steps: analysis.improve,
+        context_payload: {
+          next_meal: analysis.next_meal,
+          strengths: analysis.strengths,
+          totals: analysis.totals,
+        },
+      };
+
+      const { data: feedbackRow, error: feedbackError } = await supabase
+        .from("ai_consultations")
+        .insert(feedbackPayload)
+        .select("*")
+        .single();
+
+      if (feedbackError) {
+        throw feedbackError;
+      }
+
+      setNutritionLogs((current) => [...((insertedLogs as NutritionLog[] | null) ?? []), ...current]
+        .sort((a, b) => new Date(b.eaten_at).getTime() - new Date(a.eaten_at).getTime())
+        .slice(0, 20));
+      setConsultations((current) => [
+        {
+          ...(feedbackRow as any),
+          action_steps: Array.isArray((feedbackRow as any).action_steps) ? (feedbackRow as any).action_steps : [],
+          context_payload: (feedbackRow as any).context_payload && typeof (feedbackRow as any).context_payload === "object" ? (feedbackRow as any).context_payload : {},
+        },
+        ...current,
+      ].slice(0, 8));
+      setDailyMealForm(initialDailyMealForm);
+
+      toast({
+        title: "Dia analizado",
+        description: "Tu nutricionista IA ya analizo tus comidas y guardo el seguimiento.",
+      });
+    } catch (error: any) {
+      console.error("Error analizando comidas del dia", error);
+      toast({
+        title: "No se pudo analizar tu dia",
+        description: error.message ?? "Error inesperado",
+        variant: "destructive",
+      });
+    } finally {
+      setMealSaving(false);
+    }
+  };
+
   const handleSaveCheckin = async (event: React.FormEvent) => {
     event.preventDefault();
 
@@ -568,6 +770,124 @@ export default function Dashboard() {
       title: "Check-in guardado",
       description: "Tu progreso de hoy ya fue registrado.",
     });
+  };
+
+  const handleConsultation = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!user || !profile) return;
+    if (!hasPremiumAccess) {
+      toast({
+        title: "Funcion premium",
+        description: "La consulta rapida con tu nutricionista IA es parte del premium.",
+      });
+      return;
+    }
+
+    if (!consultationQuestion.trim()) {
+      toast({
+        title: "Escribe una consulta",
+        description: "Haz una pregunta concreta para recibir una respuesta util.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setConsultationLoading(true);
+
+    try {
+      const contextSummary = [
+        dailyTargets ? `Meta diaria ${dailyTargets.calories} kcal` : "",
+        `Consumido hoy ${todayNutrition.calories} kcal`,
+        latestCheckin?.weight ? `Ultimo peso ${latestCheckin.weight} kg` : "",
+      ].filter(Boolean).join(" | ");
+
+      const consultation: NutritionConsultation = await answerNutritionConsultation(
+        consultationQuestion,
+        profile,
+        contextSummary,
+      );
+
+      const payload = {
+        user_id: user.id,
+        consultation_type: "quick_question",
+        question: consultationQuestion.trim(),
+        answer: consultation.answer,
+        action_steps: consultation.action_steps,
+        context_payload: {},
+      };
+
+      const { data, error } = await supabase
+        .from("ai_consultations")
+        .insert(payload)
+        .select("*")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      setConsultations((current) => [
+        {
+          ...(data as any),
+          action_steps: Array.isArray((data as any).action_steps) ? (data as any).action_steps : [],
+          context_payload: (data as any).context_payload && typeof (data as any).context_payload === "object" ? (data as any).context_payload : {},
+        },
+        ...current,
+      ].slice(0, 8));
+      setConsultationQuestion("");
+    } catch (error: any) {
+      console.error("Error generando consulta IA", error);
+      toast({
+        title: "No se pudo responder tu consulta",
+        description: error.message ?? "Error inesperado",
+        variant: "destructive",
+      });
+    } finally {
+      setConsultationLoading(false);
+    }
+  };
+
+  const handleToggleWorkoutDay = async (dayTitle: string) => {
+    if (!user || !workoutPlan || !hasPremiumAccess) return;
+
+    setWorkoutSaving(dayTitle);
+
+    try {
+      const current = workoutProgressMap.get(dayTitle);
+      const completed = !current?.completed;
+      const payload = {
+        user_id: user.id,
+        plan_id: workoutPlan.id,
+        workout_day: dayTitle,
+        completed,
+        completed_at: completed ? new Date().toISOString() : null,
+      };
+
+      const { data, error } = await supabase
+        .from("workout_progress")
+        .upsert(payload, { onConflict: "user_id,plan_id,workout_day" })
+        .select("*")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      setWorkoutProgress((currentRows) => [
+        data as WorkoutProgressRow,
+        ...currentRows.filter((item) => !(item.plan_id === workoutPlan.id && item.workout_day === dayTitle)),
+      ]);
+    } catch (error: any) {
+      console.error("Error actualizando workout_progress", error);
+      toast({
+        title: "No se pudo guardar el avance",
+        description: error.message ?? "Error inesperado",
+        variant: "destructive",
+      });
+    } finally {
+      setWorkoutSaving(null);
+    }
   };
 
   if (authLoading || loadingData) {
@@ -785,10 +1105,28 @@ export default function Dashboard() {
               <div className="mt-6 space-y-4">
                 {activePlan.content.sections.map((section, index) => {
                   const locked = !hasPremiumAccess && index >= previewSections;
+                  const workoutProgressRow = activeTab === "rutina" ? workoutProgressMap.get(section.title) : null;
 
                   return (
                     <div key={`${section.title}-${index}`} className="rounded-xl border border-border/60 bg-background/20 p-4">
-                      <h4 className="font-display text-lg font-semibold">{section.title}</h4>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h4 className="font-display text-lg font-semibold">{section.title}</h4>
+                          {activeTab === "rutina" && workoutProgressRow?.completed ? (
+                            <p className="mt-1 text-xs font-medium text-primary">Dia completado</p>
+                          ) : null}
+                        </div>
+                        {activeTab === "rutina" ? (
+                          <Button
+                            size="sm"
+                            variant={workoutProgressRow?.completed ? "default" : "outline"}
+                            disabled={!hasPremiumAccess || savingWorkoutDay === section.title}
+                            onClick={() => void handleToggleWorkoutDay(section.title)}
+                          >
+                            {savingWorkoutDay === section.title ? "Guardando..." : workoutProgressRow?.completed ? "Hecho" : "Marcar"}
+                          </Button>
+                        ) : null}
+                      </div>
                       <ul className={`mt-3 space-y-2 text-sm text-muted-foreground ${locked ? "select-none blur-sm" : ""}`}>
                         {section.bullets.map((bullet) => (
                           <li key={bullet} className="flex gap-2">
@@ -832,72 +1170,26 @@ export default function Dashboard() {
                   <h3 className="font-display text-xl font-bold">Seguimiento nutricional diario</h3>
                 </div>
 
-                <form onSubmit={handleSaveMeal} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="meal_name">Que comiste</Label>
-                    <Input
-                      id="meal_name"
-                      value={mealForm.meal_name}
-                      onChange={(event) => setMealForm((current) => ({ ...current, meal_name: event.target.value }))}
-                      placeholder="Ej: almuerzo con arroz, pollo y ensalada"
-                    />
-                  </div>
+                <form onSubmit={handleAnalyzeDailyMeals} className="space-y-4">
+                  {([
+                    ["desayuno", "Desayuno"],
+                    ["almuerzo", "Almuerzo"],
+                    ["cena", "Cena"],
+                    ["snacks", "Snacks"],
+                  ] as Array<[keyof DailyMealFormState, string]>).map(([key, label]) => (
+                    <div key={key} className="space-y-2">
+                      <Label htmlFor={key}>{label}</Label>
+                      <Textarea
+                        id={key}
+                        value={dailyMealForm[key]}
+                        onChange={(event) => setDailyMealForm((current) => ({ ...current, [key]: event.target.value }))}
+                        placeholder={`Ej: ${label.toLowerCase()} con alimentos y cantidades aproximadas`}
+                      />
+                    </div>
+                  ))}
 
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="meal_calories">Calorias</Label>
-                      <Input
-                        id="meal_calories"
-                        type="number"
-                        value={mealForm.calories}
-                        onChange={(event) => setMealForm((current) => ({ ...current, calories: event.target.value }))}
-                        placeholder="650"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="meal_protein">Proteina</Label>
-                      <Input
-                        id="meal_protein"
-                        type="number"
-                        value={mealForm.protein}
-                        onChange={(event) => setMealForm((current) => ({ ...current, protein: event.target.value }))}
-                        placeholder="40"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="meal_carbs">Carbohidratos</Label>
-                      <Input
-                        id="meal_carbs"
-                        type="number"
-                        value={mealForm.carbs}
-                        onChange={(event) => setMealForm((current) => ({ ...current, carbs: event.target.value }))}
-                        placeholder="55"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="meal_fats">Grasas</Label>
-                      <Input
-                        id="meal_fats"
-                        type="number"
-                        value={mealForm.fats}
-                        onChange={(event) => setMealForm((current) => ({ ...current, fats: event.target.value }))}
-                        placeholder="18"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="meal_notes">Observacion</Label>
-                    <Textarea
-                      id="meal_notes"
-                      value={mealForm.notes}
-                      onChange={(event) => setMealForm((current) => ({ ...current, notes: event.target.value }))}
-                      placeholder="Ej: mucha hambre post entreno, poca agua, buena digestion"
-                    />
-                  </div>
-
-                  <Button type="submit" disabled={mealSaving}>
-                    {mealSaving ? "Guardando..." : "Registrar comida"}
+                  <Button type="submit" variant="hero" disabled={mealSaving}>
+                    {mealSaving ? "Analizando..." : "Analizar mi dia con IA"}
                   </Button>
                 </form>
 
@@ -918,6 +1210,32 @@ export default function Dashboard() {
                   </div>
                 </div>
 
+                <div className="mt-6 rounded-xl border border-primary/15 bg-primary/5 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Bot className="h-4 w-4 text-primary" />
+                    <h4 className="font-display text-lg font-semibold">Feedback del nutricionista IA</h4>
+                  </div>
+                  {latestNutritionFeedback ? (
+                    <>
+                      <p className="text-sm leading-relaxed text-muted-foreground">{latestNutritionFeedback.answer}</p>
+                      {latestNutritionFeedback.action_steps.length ? (
+                        <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                          {latestNutritionFeedback.action_steps.map((step) => (
+                            <li key={step} className="flex gap-2">
+                              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                              <span>{step}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Cuando registres tu dia, tu nutricionista IA te dira que hiciste bien, que mejorar y que te conviene comer despues.
+                    </p>
+                  )}
+                </div>
+
                 <div className="mt-6 space-y-3">
                   <h4 className="font-display text-lg font-semibold">Ultimas comidas</h4>
                   {nutritionLogs.length ? nutritionLogs.map((log) => (
@@ -926,7 +1244,7 @@ export default function Dashboard() {
                         <div>
                           <div className="font-medium">{log.meal_name}</div>
                           <div className="mt-1 text-xs text-muted-foreground">
-                            {new Date(log.eaten_at).toLocaleString("es-AR")}
+                            {log.food_description ?? new Date(log.eaten_at).toLocaleString("es-AR")}
                           </div>
                         </div>
                         <div className="text-right text-sm text-muted-foreground">
@@ -934,7 +1252,7 @@ export default function Dashboard() {
                           <div>P {formatNumber(log.protein)} · C {formatNumber(log.carbs)} · G {formatNumber(log.fats)}</div>
                         </div>
                       </div>
-                      {log.notes && <p className="mt-3 text-sm text-muted-foreground">{log.notes}</p>}
+                      {(log.ai_summary || log.notes) && <p className="mt-3 text-sm text-muted-foreground">{log.ai_summary ?? log.notes}</p>}
                     </div>
                   )) : (
                     <p className="text-sm text-muted-foreground">Todavia no registraste comidas.</p>
@@ -1068,6 +1386,72 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+          </div>
+
+          <div className={`glass-card rounded-2xl p-6 ${!hasPremiumAccess ? "relative overflow-hidden" : ""}`}>
+            {!hasPremiumAccess && <div className="absolute inset-0 z-10 bg-background/45 backdrop-blur-[2px]" />}
+
+            <div className={!hasPremiumAccess ? "select-none blur-sm" : ""}>
+              <div className="mb-5 flex items-center gap-2">
+                <Bot className="h-5 w-5 text-primary" />
+                <h3 className="font-display text-xl font-bold">Consulta rapida con tu nutricionista IA</h3>
+              </div>
+
+              <form onSubmit={handleConsultation} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="consultation_question">Tu pregunta</Label>
+                  <Textarea
+                    id="consultation_question"
+                    value={consultationQuestion}
+                    onChange={(event) => setConsultationQuestion(event.target.value)}
+                    placeholder="Ej: ¿Puedo comer pizza hoy? ¿Que me conviene cenar liviano? ¿Que snack me recomiendas?"
+                  />
+                </div>
+                <Button type="submit" variant="hero" disabled={consultationLoading}>
+                  {consultationLoading ? "Respondiendo..." : "Preguntar a mi coach IA"}
+                </Button>
+              </form>
+
+              <div className="mt-6 space-y-3">
+                <h4 className="font-display text-lg font-semibold">Respuestas recientes</h4>
+                {quickConsultations.length ? quickConsultations.map((item) => (
+                  <div key={item.id} className="rounded-xl border border-border/60 bg-background/20 p-4">
+                    <div className="text-sm font-medium text-primary">Pregunta</div>
+                    <p className="mt-1 font-medium">{item.question}</p>
+                    <div className="mt-4 text-sm font-medium text-primary">Respuesta</div>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.answer}</p>
+                    {item.action_steps.length ? (
+                      <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                        {item.action_steps.map((step) => (
+                          <li key={step} className="flex gap-2">
+                            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                )) : (
+                  <p className="text-sm text-muted-foreground">
+                    Todavia no hiciste consultas. Usa este espacio como si fuera tu nutricionista disponible 24/7.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {!hasPremiumAccess && (
+              <div className="absolute inset-x-0 bottom-0 z-20 p-6">
+                <div className="rounded-2xl border border-primary/20 bg-background/90 p-5 shadow-2xl backdrop-blur">
+                  <h4 className="font-display text-lg font-bold">Consulta premium 24/7</h4>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Pregunta si te conviene una comida, como ajustar tu cena o que snack elegir y recibe respuesta inmediata de la IA.
+                  </p>
+                  <Button className="mt-4" variant="hero" onClick={() => void handleSubscribe()} disabled={checkoutLoading}>
+                    Activar premium
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {!hasPremiumAccess && activePlan && (
