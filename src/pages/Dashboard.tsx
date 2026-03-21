@@ -671,96 +671,212 @@ function formatTimer(seconds: number | null) {
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+function ExerciseStage({
+  caption,
+  children,
+  title,
+}: {
+  caption: string;
+  children: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-background/30 p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">{title}</div>
+      <div className="mt-2">{children}</div>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{caption}</p>
+    </div>
+  );
+}
+
+function ExerciseCanvas({
+  children,
+  label,
+}: {
+  children: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <svg viewBox="0 0 220 140" aria-label={label} className="h-28 w-full text-primary">
+      <title>{label}</title>
+      {children}
+    </svg>
+  );
+}
+
 function ExerciseDemo({ label, variant }: { label: string; variant: ExerciseIllustration }) {
-  const baseProps = {
+  const line = {
     fill: "none",
     stroke: "currentColor",
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
-    strokeWidth: 4,
+    strokeWidth: 5,
   };
+  const softLine = { ...line, opacity: 0.35 };
+  const arrow = { ...line, opacity: 0.75 };
 
   switch (variant) {
     case "bench":
       return (
-        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
-          <title>{label}</title>
-          <path {...baseProps} d="M32 96h116M52 96V72h54v24M106 72l22-18M128 54l16 6" />
-          <circle {...baseProps} cx="64" cy="50" r="10" />
-          <path {...baseProps} d="M74 56h24m-12 0v18m-26 34 8-18 18-16m0 0 18 16 6 18" />
-          <path {...baseProps} d="M94 44h38m-8-10 8 10-8 10" opacity="0.7" />
-        </svg>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ExerciseStage title="Inicio" caption="Barra arriba, escapulas atras y pies firmes en el suelo.">
+            <ExerciseCanvas label={`${label} inicio`}>
+              <path {...line} d="M22 96h168M50 96V74h70v22" />
+              <circle {...line} cx="78" cy="50" r="10" />
+              <path {...line} d="M88 58h36m-18 0v18m-34 20 10-20 24-18m0 0 24 18 8 20" />
+              <path {...line} d="M88 42h68" />
+              <path {...arrow} d="M146 30h26m-10-10 10 10-10 10" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+          <ExerciseStage title="Final" caption="Baja la barra al pecho con antebrazos rectos y vuelve a empujar.">
+            <ExerciseCanvas label={`${label} final`}>
+              <path {...line} d="M22 96h168M50 96V74h70v22" />
+              <circle {...line} cx="78" cy="50" r="10" />
+              <path {...line} d="M88 58h36m-18 0v18m-34 20 10-20 24-18m0 0 24 18 8 20" />
+              <path {...line} d="M74 66h78" />
+              <path {...arrow} d="M164 34v24m0 0-8-8m8 8 8-8" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+        </div>
       );
     case "hinge":
       return (
-        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
-          <title>{label}</title>
-          <circle {...baseProps} cx="74" cy="34" r="10" />
-          <path {...baseProps} d="M74 44v30l-18 18m18-18 28 8m-28-8 24-16m-18 54 18-28 14 26" />
-          <path {...baseProps} d="M54 104h72" opacity="0.4" />
-          <path {...baseProps} d="M120 30c12 14 12 36 0 50" opacity="0.7" />
-        </svg>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ExerciseStage title="Inicio" caption="De pie, barra pegada a muslos y pecho abierto.">
+            <ExerciseCanvas label={`${label} inicio`}>
+              <circle {...line} cx="94" cy="24" r="10" />
+              <path {...line} d="M94 34v34m0 0-20 18m20-18 20 18m-32-30H56m50 0h24M56 112h76" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+          <ExerciseStage title="Final" caption="Lleva la cadera atras y baja la barra rozando piernas sin curvar espalda.">
+            <ExerciseCanvas label={`${label} final`}>
+              <circle {...line} cx="86" cy="26" r="10" />
+              <path {...line} d="M86 36v24l34 8m-34-8-22 24m22-24-24 10m58-2 12 28m-30-10 18-18" />
+              <path {...line} d="M54 108h88" />
+              <path {...arrow} d="M142 24c10 16 10 40 0 58" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+        </div>
       );
     case "pull":
       return (
-        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
-          <title>{label}</title>
-          <path {...baseProps} d="M48 18h84" />
-          <circle {...baseProps} cx="90" cy="46" r="10" />
-          <path {...baseProps} d="M70 18v22m40-22v22M78 56v28m24-28v28M90 56v22m0 0-18 18m18-18 18 18m-18 0-12 24m12-24 12 24" />
-          <path {...baseProps} d="M128 54c-8 8-18 12-28 12" opacity="0.7" />
-        </svg>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ExerciseStage title="Inicio" caption="Cuelga con brazos estirados y hombros abajo.">
+            <ExerciseCanvas label={`${label} inicio`}>
+              <path {...line} d="M46 18h128" />
+              <circle {...line} cx="110" cy="54" r="10" />
+              <path {...line} d="M82 18v26m56-26v26M98 64v24m24-24v24M110 64v20m0 0-18 18m18-18 18 18m-18 0-10 24m10-24 10 24" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+          <ExerciseStage title="Final" caption="Tira con codos hacia abajo hasta acercar pecho a la barra.">
+            <ExerciseCanvas label={`${label} final`}>
+              <path {...line} d="M46 18h128" />
+              <circle {...line} cx="110" cy="36" r="10" />
+              <path {...line} d="M82 18v12m56-12v12M100 46v22m20-22v22M110 46v16m0 0-18 18m18-18 18 18m-18 0-10 24m10-24 10 24" />
+              <path {...arrow} d="M158 62c-10 8-26 12-42 12" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+        </div>
       );
     case "carry":
       return (
-        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
-          <title>{label}</title>
-          <circle {...baseProps} cx="90" cy="28" r="10" />
-          <path {...baseProps} d="M90 38v34m0 0-20 16m20-16 20 16m-30-24H56m48 0h20M56 64v34m68-34v34M44 98h24m56 0h24" />
-          <path {...baseProps} d="M46 26h-14m0 0 8-8m-8 8 8 8M134 26h14m0 0-8-8m8 8-8 8" opacity="0.7" />
-        </svg>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ExerciseStage title="Postura" caption="Camina alto, abdomen firme y hombros lejos de las orejas.">
+            <ExerciseCanvas label={`${label} postura`}>
+              <circle {...line} cx="110" cy="28" r="10" />
+              <path {...line} d="M110 38v34m0 0-20 18m20-18 20 18m-28-24H78m40 0h24M78 66v36m64-36v36M66 102h24m40 0h24" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+          <ExerciseStage title="Movimiento" caption="Da pasos cortos y firmes sin balancearte hacia los lados.">
+            <ExerciseCanvas label={`${label} movimiento`}>
+              <circle {...line} cx="104" cy="28" r="10" />
+              <path {...line} d="M104 38v34m0 0-18 16m18-16 22 18m-26-22H78m40 0h24M78 68v34m64-34v34M66 102h24m40 0h24" />
+              <path {...arrow} d="M42 40h-18m0 0 10-8m-10 8 10 8M164 40h18m0 0-10-8m10 8-10 8" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+        </div>
       );
     case "row":
       return (
-        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
-          <title>{label}</title>
-          <circle {...baseProps} cx="66" cy="34" r="10" />
-          <path {...baseProps} d="M66 44l18 18 28 6m-28-6-16 20m16-20-28 8m28 12 16 24m-44-18 12 18" />
-          <path {...baseProps} d="M116 68h26m-8-8 8 8-8 8" opacity="0.7" />
-          <path {...baseProps} d="M46 112h88" opacity="0.4" />
-        </svg>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ExerciseStage title="Inicio" caption="Torso inclinado, espalda neutra y barra colgando debajo del pecho.">
+            <ExerciseCanvas label={`${label} inicio`}>
+              <circle {...line} cx="80" cy="26" r="10" />
+              <path {...line} d="M80 36l22 24 40 6m-40-6-24 24m24-24-30 8m72 0h22M48 112h110" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+          <ExerciseStage title="Final" caption="Lleva codos atras hasta tocar la barra cerca del abdomen.">
+            <ExerciseCanvas label={`${label} final`}>
+              <circle {...line} cx="80" cy="26" r="10" />
+              <path {...line} d="M80 36l22 24 34 2m-34-2-24 24m24-24-30 8m36-6h34" />
+              <path {...arrow} d="M152 60h24m-8-8 8 8-8 8" />
+              <path {...softLine} d="M48 112h110" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+        </div>
       );
     case "bike":
       return (
-        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
-          <title>{label}</title>
-          <circle {...baseProps} cx="58" cy="96" r="18" />
-          <circle {...baseProps} cx="122" cy="96" r="18" />
-          <path {...baseProps} d="M58 96l26-28 20 28H58m26-28h24m-12 0-10-18m26 18 12-10" />
-          <path {...baseProps} d="M96 38h16m-8 0v24m0 0-22 10" />
-          <path {...baseProps} d="M146 38c8 12 8 28 0 40" opacity="0.7" />
-        </svg>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ExerciseStage title="Ritmo suave" caption="Pedalea controlado para entrar en calor y encontrar cadencia.">
+            <ExerciseCanvas label={`${label} suave`}>
+              <circle {...line} cx="62" cy="98" r="20" />
+              <circle {...line} cx="142" cy="98" r="20" />
+              <path {...line} d="M62 98l30-30 24 30H62m30-30h26m-12 0-12-18m28 18 16-14" />
+              <path {...line} d="M104 40h16m-8 0v28m0 0-22 12" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+          <ExerciseStage title="Ritmo fuerte" caption="Acelera durante el bloque intenso sin perder postura ni control.">
+            <ExerciseCanvas label={`${label} fuerte`}>
+              <circle {...line} cx="62" cy="98" r="20" />
+              <circle {...line} cx="142" cy="98" r="20" />
+              <path {...line} d="M62 98l30-30 24 30H62m30-30h26m-12 0-12-18m28 18 16-14" />
+              <path {...line} d="M104 40h16m-8 0v28m0 0-22 12" />
+              <path {...arrow} d="M170 36c12 12 14 30 2 46" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+        </div>
       );
     case "lunge":
       return (
-        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
-          <title>{label}</title>
-          <circle {...baseProps} cx="72" cy="26" r="10" />
-          <path {...baseProps} d="M72 36v28l22 16m-22-16-18 24m18-24-20 8m42 8 26 6m-16 0-6 26m-24 0 10-26" />
-          <path {...baseProps} d="M40 112h100" opacity="0.4" />
-          <path {...baseProps} d="M134 54v28m0 0-8-8m8 8 8-8" opacity="0.7" />
-        </svg>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ExerciseStage title="Inicio" caption="Da un paso amplio y mantente erguido antes de bajar.">
+            <ExerciseCanvas label={`${label} inicio`}>
+              <circle {...line} cx="90" cy="24" r="10" />
+              <path {...line} d="M90 34v30m0 0-22 20m22-20 24 18m-26-20-22 10m46 8 36 6" />
+              <path {...softLine} d="M38 112h138" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+          <ExerciseStage title="Final" caption="Baja ambas rodillas con control y empuja el suelo para volver arriba.">
+            <ExerciseCanvas label={`${label} final`}>
+              <circle {...line} cx="90" cy="24" r="10" />
+              <path {...line} d="M90 34v28l24 18m-24-18-18 26m18-26-24 10m48 8 34 6m-24 0-8 26m-24 0 12-26" />
+              <path {...arrow} d="M176 50v28m0 0-8-8m8 8 8-8" />
+              <path {...softLine} d="M38 112h138" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+        </div>
       );
     case "squat":
     default:
       return (
-        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
-          <title>{label}</title>
-          <circle {...baseProps} cx="72" cy="26" r="10" />
-          <path {...baseProps} d="M72 36v26m0 0-18 18m18-18 22 18m-22-18-22-8m22 8 18-8m-36 54 18-36m18 0 18 36" />
-          <path {...baseProps} d="M42 116h96" opacity="0.4" />
-          <path {...baseProps} d="M128 40v34m0 0-8-8m8 8 8-8" opacity="0.7" />
-        </svg>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ExerciseStage title="Inicio" caption="Pies firmes, pecho alto y barra estable sobre la espalda.">
+            <ExerciseCanvas label={`${label} inicio`}>
+              <circle {...line} cx="94" cy="24" r="10" />
+              <path {...line} d="M54 42h80m-40 0v26m0 0-20 18m20-18 22 18m-24-20-22-8m22 8 18-8m-40 44 18-24m22 0 18 24" />
+              <path {...softLine} d="M48 112h92" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+          <ExerciseStage title="Final" caption="Cadera atras, rodillas alineadas y baja con control hasta la profundidad segura.">
+            <ExerciseCanvas label={`${label} final`}>
+              <circle {...line} cx="94" cy="22" r="10" />
+              <path {...line} d="M54 40h80m-40 0v20l-16 12m16-12 20 14m-18-14-18-8m18 8 16-6m-38 50 18-22m18-2 18 24" />
+              <path {...arrow} d="M164 34v28m0 0-8-8m8 8 8-8" />
+              <path {...softLine} d="M48 112h92" />
+            </ExerciseCanvas>
+          </ExerciseStage>
+        </div>
       );
   }
 }
