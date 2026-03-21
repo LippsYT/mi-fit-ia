@@ -276,6 +276,10 @@ export default function Dashboard() {
   const [dailyMealForm, setDailyMealForm] = useState<DailyMealFormState>(initialDailyMealForm);
   const [consultationQuestion, setConsultationQuestion] = useState("");
 
+  const functionHeaders = session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : undefined;
+
   const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
   const activePlan = activeTab === "dieta" ? dietPlan : workoutPlan;
   const dailyTargets = useMemo(() => estimateDailyTargets(profile), [profile]);
@@ -429,6 +433,15 @@ export default function Dashboard() {
 
   const handleGenerate = async (planType: PlanType) => {
     if (!user) return;
+    if (!session?.access_token) {
+      toast({
+        title: "Debes iniciar sesion",
+        description: "No pudimos validar tu sesion para generar el plan.",
+        variant: "destructive",
+      });
+      navigate("/login");
+      return;
+    }
     if (!profile) {
       toast({
         title: "Completa tu onboarding primero",
@@ -444,6 +457,7 @@ export default function Dashboard() {
     try {
       const { data: generatedResponse, error: generateError } = await supabase.functions.invoke("generate-plan", {
         body: { planType },
+        headers: functionHeaders,
       });
 
       if (generateError) {
@@ -607,6 +621,15 @@ export default function Dashboard() {
     event.preventDefault();
 
     if (!user || !profile) return;
+    if (!session?.access_token) {
+      toast({
+        title: "Debes iniciar sesion",
+        description: "No pudimos validar tu sesion para analizar tus comidas.",
+        variant: "destructive",
+      });
+      navigate("/login");
+      return;
+    }
     if (!hasPremiumAccess) {
       toast({
         title: "Funcion premium",
@@ -637,6 +660,7 @@ export default function Dashboard() {
           profile,
           targets: dailyTargets,
         },
+        headers: functionHeaders,
       });
 
       if (analysisError) {
@@ -801,6 +825,15 @@ export default function Dashboard() {
     event.preventDefault();
 
     if (!user || !profile) return;
+    if (!session?.access_token) {
+      toast({
+        title: "Debes iniciar sesion",
+        description: "No pudimos validar tu sesion para consultar al coach.",
+        variant: "destructive",
+      });
+      navigate("/login");
+      return;
+    }
     if (!hasPremiumAccess) {
       toast({
         title: "Funcion premium",
@@ -833,6 +866,7 @@ export default function Dashboard() {
           profile,
           contextSummary,
         },
+        headers: functionHeaders,
       });
 
       if (consultationError) {
