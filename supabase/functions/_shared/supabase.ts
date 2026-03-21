@@ -29,13 +29,22 @@ export async function requireUser(req: Request) {
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   if (!token) throw new Error("Missing bearer token");
 
-  const admin = createAdminClient();
-  const { data, error } = await admin.auth.getUser(token);
+  const userClient = createUserClient(authHeader);
+  const userResult = await userClient.auth.getUser();
 
-  if (error || !data.user) {
-    console.error("No se pudo validar el JWT del usuario en la edge function", error);
+  if (userResult.data.user) {
+    return { authHeader, supabase: createAdminClient(), user: userResult.data.user };
+  }
+
+  console.error("Fallo la validacion del JWT con el cliente de usuario", userResult.error);
+
+  const admin = createAdminClient();
+  const adminResult = await admin.auth.getUser(token);
+
+  if (adminResult.error || !adminResult.data.user) {
+    console.error("No se pudo validar el JWT del usuario en la edge function", adminResult.error);
     throw new Error("No autenticado");
   }
 
-  return { authHeader, supabase: admin, user: data.user };
+  return { authHeader, supabase: admin, user: adminResult.data.user };
 }
