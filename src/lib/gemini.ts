@@ -65,13 +65,9 @@ const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL ?? "gemini-2.5-flash";
 
 console.log("frontend gemini loaded?", !!import.meta.env.VITE_GEMINI_API_KEY);
 
-export const isGeminiConfigured = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
-export const GEMINI_MISSING_MESSAGE =
-  "Gemini no esta configurado en este deploy. Revisa Vercel, confirma VITE_GEMINI_API_KEY y vuelve a desplegar.";
-
 function ensureGeminiConfig() {
   if (!geminiKey) {
-    throw new Error(GEMINI_MISSING_MESSAGE);
+    throw new Error("Gemini no esta disponible para esta funcion premium en este momento.");
   }
 }
 
