@@ -5,18 +5,37 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
-import { generateDietPlan, generateWorkoutPlan, type FitnessProfile, type PremiumPlan } from "@/lib/gemini";
+import {
+  generateDietPlan,
+  generateWorkoutPlan,
+  normalizePlanForStorage,
+  normalizePremiumPlan,
+  type FitnessProfile,
+  type PremiumPlan,
+} from "@/lib/gemini";
+import { startCheckout } from "@/lib/checkout";
+
+type PlanType = "dieta" | "rutina";
+
+type PlanRow = {
+  content: unknown;
+  created_at: string;
+  id: string;
+  plan_type: PlanType;
+  updated_at: string;
+};
 
 type StoredPlan = {
   content: PremiumPlan;
   created_at: string;
-  plan_type: "dieta" | "rutina";
+  id: string;
+  plan_type: PlanType;
+  updated_at: string;
 };
 
 type SubscriptionRow = {
   current_period_end: string | null;
   status: string;
-  stripe_customer_id: string | null;
 };
 
 const previewSections = 2;
@@ -28,44 +47,35 @@ function isActiveSubscription(subscription: SubscriptionRow | null) {
   return new Date(subscription.current_period_end) > new Date();
 }
 
-function normalizePlan(content: any, planType: "dieta" | "rutina"): PremiumPlan {
-  if (content?.sections && Array.isArray(content.sections)) {
-    return content as PremiumPlan;
-  }
+function pickLatestPlan(rows: PlanRow[], planType: PlanType): StoredPlan | null {
+  const compatibleRows = rows
+    .filter((row) => row.plan_type === planType)
+    .map((row) => ({
+      normalized: normalizePremiumPlan(row.content, planType),
+      row,
+    }))
+    .filter((item): item is { normalized: PremiumPlan; row: PlanRow } => Boolean(item.normalized))
+    .sort((a, b) => new Date(b.row.updated_at ?? b.row.created_at).getTime() - new Date(a.row.updated_at ?? a.row.created_at).getTime());
 
-  if (planType === "dieta" && Array.isArray(content?.meals)) {
-    return {
-      closing: `Macros estimados: Proteinas ${content?.macros?.proteinas ?? "-"}, Carbohidratos ${content?.macros?.carbohidratos ?? "-"}, Grasas ${content?.macros?.grasas ?? "-"}.`,
-      intro: "Convertimos tu plan guardado anterior a la nueva vista premium.",
-      sections: content.meals.map((meal: any) => ({
-        title: meal.meal ?? "Comida",
-        bullets: [meal.items ?? "", `Calorias estimadas: ${meal.cal ?? "-"}`],
-      })),
-      subtitle: `Total diario estimado: ${content?.totalCal ?? "-"}`,
-      title: "Plan de alimentacion personalizado",
-    };
-  }
+  const latest = compatibleRows[0];
 
-  if (planType === "rutina" && Array.isArray(content?.days)) {
-    return {
-      closing: "Sigue una progresion gradual y prioriza tecnica, descanso y constancia.",
-      intro: "Convertimos tu rutina guardada anterior a la nueva vista premium.",
-      sections: content.days.map((day: any) => ({
-        title: `${day.day ?? "Dia"} - ${day.focus ?? "Enfoque"}`,
-        bullets: [day.exercises ?? ""],
-      })),
-      subtitle: "Rutina semanal personalizada",
-      title: "Plan de entrenamiento premium",
-    };
+  if (!latest) {
+    return null;
   }
 
   return {
-    closing: "Genera nuevamente tu plan para obtener una version premium completa.",
-    intro: "No pudimos interpretar el plan guardado con el formato actual.",
-    sections: [],
-    subtitle: "Contenido antiguo no compatible",
-    title: "Plan pendiente de regeneracion",
+    content: latest.normalized,
+    created_at: latest.row.created_at,
+    id: latest.row.id,
+    plan_type: latest.row.plan_type,
+    updated_at: latest.row.updated_at,
   };
+}
+
+function needsMigration(row: PlanRow) {
+  const normalized = normalizePremiumPlan(row.content, row.plan_type);
+  if (!normalized) return null;
+  return JSON.stringify(row.content) === JSON.stringify(normalized) ? null : normalized;
 }
 
 export default function Dashboard() {
@@ -75,9 +85,9 @@ export default function Dashboard() {
   const [dietPlan, setDietPlan] = useState<StoredPlan | null>(null);
   const [workoutPlan, setWorkoutPlan] = useState<StoredPlan | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null);
-  const [activeTab, setActiveTab] = useState<"dieta" | "rutina">("dieta");
+  const [activeTab, setActiveTab] = useState<PlanType>("dieta");
   const [loadingData, setLoadingData] = useState(true);
-  const [generating, setGenerating] = useState<"dieta" | "rutina" | null>(null);
+  const [generating, setGenerating] = useState<PlanType | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
@@ -101,12 +111,11 @@ export default function Dashboard() {
           .maybeSingle(),
         supabase
           .from("generated_plans")
-          .select("content, created_at, plan_type")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false }),
+          .select("id, content, created_at, updated_at, plan_type")
+          .eq("user_id", user.id),
         supabase
           .from("subscriptions")
-          .select("status, current_period_end, stripe_customer_id")
+          .select("status, current_period_end")
           .eq("user_id", user.id)
           .maybeSingle(),
       ]);
@@ -122,33 +131,35 @@ export default function Dashboard() {
       }
 
       setProfile((profileResult.data as FitnessProfile | null) ?? null);
-
-      const plans = (plansResult.data ?? []) as StoredPlan[];
-      const latestDiet = plans.find((plan) => plan.plan_type === "dieta") ?? null;
-      const latestWorkout = plans.find((plan) => plan.plan_type === "rutina") ?? null;
-      setDietPlan(latestDiet ? { ...latestDiet, content: normalizePlan(latestDiet.content, "dieta") } : null);
-      setWorkoutPlan(latestWorkout ? { ...latestWorkout, content: normalizePlan(latestWorkout.content, "rutina") } : null);
       setSubscription((subscriptionResult.data as SubscriptionRow | null) ?? null);
+
+      const planRows = (plansResult.data ?? []) as PlanRow[];
+      setDietPlan(pickLatestPlan(planRows, "dieta"));
+      setWorkoutPlan(pickLatestPlan(planRows, "rutina"));
       setLoadingData(false);
+
+      const rowsToMigrate = planRows
+        .map((row) => ({ normalized: needsMigration(row), row }))
+        .filter((item): item is { normalized: PremiumPlan; row: PlanRow } => Boolean(item.normalized));
+
+      if (rowsToMigrate.length) {
+        void Promise.all(
+          rowsToMigrate.map(({ normalized, row }) =>
+            supabase
+              .from("generated_plans")
+              .update({ content: normalized })
+              .eq("id", row.id),
+          ),
+        ).catch((error) => {
+          console.error("No se pudieron migrar planes legacy al formato actual", error);
+        });
+      }
     };
 
     void loadDashboard();
   }, [authLoading, navigate, user]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("subscribed") === "true") {
-      toast({
-        title: "Suscripcion activada",
-        description: "Tu cuenta premium ya puede desbloquear el dashboard completo.",
-      });
-      params.delete("subscribed");
-      const nextQuery = params.toString();
-      window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
-    }
-  }, []);
-
-  const handleGenerate = async (planType: "dieta" | "rutina") => {
+  const handleGenerate = async (planType: PlanType) => {
     if (!user) return;
     if (!profile) {
       toast({
@@ -163,25 +174,35 @@ export default function Dashboard() {
     setGenerating(planType);
 
     try {
-      const content = planType === "dieta"
+      const generated = planType === "dieta"
         ? await generateDietPlan(profile)
         : await generateWorkoutPlan(profile);
 
-      const { error } = await supabase.from("generated_plans").insert({
+      const content = normalizePlanForStorage(generated, planType);
+
+      const payload = {
         user_id: user.id,
         plan_type: planType,
         content,
-      });
+      };
+
+      const { data, error } = await supabase
+        .from("generated_plans")
+        .upsert(payload, { onConflict: "user_id,plan_type" })
+        .select("id, content, created_at, updated_at, plan_type")
+        .single();
 
       if (error) {
-        console.error("Error guardando generated_plans", error, { planType, content });
+        console.error("Error guardando generated_plans", error, payload);
         throw error;
       }
 
       const storedPlan: StoredPlan = {
         content,
-        created_at: new Date().toISOString(),
+        created_at: data.created_at,
+        id: data.id,
         plan_type: planType,
+        updated_at: data.updated_at,
       };
 
       if (planType === "dieta") {
@@ -193,8 +214,8 @@ export default function Dashboard() {
       toast({
         title: planType === "dieta" ? "Plan de alimentacion generado" : "Rutina generada",
         description: hasPremiumAccess
-          ? "Ya tienes acceso completo al resultado."
-          : "Se genero una vista previa premium con CTA de suscripcion.",
+          ? "Tu contenido premium ya esta disponible en el dashboard."
+          : "Se actualizo tu vista previa premium. Suscribete para desbloquear el plan completo.",
       });
     } catch (error: any) {
       console.error(`Error generando plan ${planType}`, error);
@@ -209,60 +230,34 @@ export default function Dashboard() {
   };
 
   const handleSubscribe = async () => {
-    if (!session?.access_token || !user) {
+    if (!session?.access_token || !user?.email) {
       toast({
         title: "Debes iniciar sesion",
         description: "No pudimos validar tu sesion para Stripe.",
         variant: "destructive",
       });
+      navigate("/login");
       return;
     }
 
     setCheckoutLoading(true);
 
     try {
-      const response = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          email: user.email,
-        }),
+      const url = await startCheckout({
+        accessToken: session.access_token,
+        email: user.email,
+        userId: user.id,
       });
 
-      const rawText = await response.text();
-      let payload: { error?: string; url?: string } = {};
-
-      try {
-        payload = rawText ? JSON.parse(rawText) : {};
-      } catch (parseError) {
-        console.error("Checkout endpoint returned non-JSON response", {
-          parseError,
-          rawText,
-          status: response.status,
-        });
-        throw new Error("El backend de pago devolvio una respuesta invalida");
-      }
-
-      if (!response.ok) {
-        console.error("Error create-checkout-session", payload);
-        throw new Error(payload.error ?? "No se pudo crear la sesion de checkout");
-      }
-
-      if (!payload.url) {
-        throw new Error("Stripe no devolvio una URL de checkout");
-      }
-
-      window.location.href = payload.url;
+      window.location.href = url;
     } catch (error: any) {
       toast({
         title: "No se pudo iniciar el pago",
         description: error.message ?? "Error inesperado",
         variant: "destructive",
       });
+      navigate("/failed");
+    } finally {
       setCheckoutLoading(false);
     }
   };
@@ -386,8 +381,8 @@ export default function Dashboard() {
                 {activeTab === "dieta" ? "Tu dieta personalizada" : "Tu rutina personalizada"}
               </h2>
               <p className="text-sm text-muted-foreground">
-                {activePlan?.created_at
-                  ? `Ultima generacion: ${new Date(activePlan.created_at).toLocaleString("es-AR")}`
+                {activePlan?.updated_at
+                  ? `Ultima actualizacion: ${new Date(activePlan.updated_at).toLocaleString("es-AR")}`
                   : "Todavia no generaste este plan."}
               </p>
             </div>
@@ -432,7 +427,7 @@ export default function Dashboard() {
                   const locked = !hasPremiumAccess && index >= previewSections;
 
                   return (
-                    <div key={section.title} className="rounded-xl border border-border/60 bg-background/20 p-4">
+                    <div key={`${section.title}-${index}`} className="rounded-xl border border-border/60 bg-background/20 p-4">
                       <h4 className="font-display text-lg font-semibold">{section.title}</h4>
                       <ul className={`mt-3 space-y-2 text-sm text-muted-foreground ${locked ? "select-none blur-sm" : ""}`}>
                         {section.bullets.map((bullet) => (

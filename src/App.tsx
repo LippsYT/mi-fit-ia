@@ -8,6 +8,9 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import OnboardingForm from "./pages/OnboardingForm";
 import Dashboard from "./pages/Dashboard";
+import SuccessPage from "./pages/Success";
+import CancelPage from "./pages/Cancel";
+import FailedPage from "./pages/Failed";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -24,8 +27,12 @@ const App = () => (
           <Route path="/pricing" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Register />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/formulario" element={<ProtectedRoute><OnboardingForm /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/success" element={<SuccessPage />} />
+          <Route path="/cancel" element={<CancelPage />} />
+          <Route path="/failed" element={<FailedPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

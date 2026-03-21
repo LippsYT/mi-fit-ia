@@ -216,8 +216,8 @@ export default async function handler(req: any, res: any) {
             quantity: 1,
           },
         ],
-        success_url: `${origin}/dashboard?subscribed=true`,
-        cancel_url: `${origin}/dashboard?canceled=true`,
+        success_url: `${origin}/success`,
+        cancel_url: `${origin}/cancel`,
         metadata: {
           supabase_user_id: userId,
         },

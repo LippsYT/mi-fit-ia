@@ -9,13 +9,15 @@ export type FitnessProfile = {
   weight: number | null;
 };
 
+export type PremiumPlanSection = {
+  bullets: string[];
+  title: string;
+};
+
 export type PremiumPlan = {
   closing: string;
   intro: string;
-  sections: Array<{
-    bullets: string[];
-    title: string;
-  }>;
+  sections: PremiumPlanSection[];
   subtitle: string;
   title: string;
 };
@@ -27,6 +29,176 @@ function ensureGeminiConfig() {
   if (!GEMINI_API_KEY) {
     throw new Error("Falta VITE_GEMINI_API_KEY");
   }
+}
+
+function cleanText(value: unknown) {
+  if (typeof value !== "string") return "";
+  return value.trim();
+}
+
+function normalizeBullets(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => cleanText(item))
+    .filter(Boolean);
+}
+
+function splitTextIntoBullets(text: string) {
+  return text
+    .split(/\r?\n|\u2022|-/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function defaultTitle(planType: "dieta" | "rutina") {
+  return planType === "dieta" ? "Plan de alimentacion personalizado" : "Plan de entrenamiento premium";
+}
+
+function defaultSubtitle(planType: "dieta" | "rutina") {
+  return planType === "dieta" ? "Nutricion semanal premium" : "Rutina semanal personalizada";
+}
+
+function extractJsonText(rawText: string) {
+  const trimmed = rawText.trim();
+
+  if (trimmed.startsWith("```")) {
+    return trimmed
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+  }
+
+  return trimmed;
+}
+
+export function normalizePremiumPlan(content: unknown, planType: "dieta" | "rutina"): PremiumPlan | null {
+  if (!content) return null;
+
+  if (typeof content === "string") {
+    const bullets = splitTextIntoBullets(content);
+    if (!bullets.length) return null;
+
+    return {
+      closing: "Puedes regenerar este plan para obtener una version mas detallada.",
+      intro: bullets[0] ?? "Resumen premium generado para tu objetivo actual.",
+      sections: [
+        {
+          title: planType === "dieta" ? "Resumen de tu plan" : "Resumen de tu rutina",
+          bullets,
+        },
+      ],
+      subtitle: defaultSubtitle(planType),
+      title: defaultTitle(planType),
+    };
+  }
+
+  if (typeof content !== "object") {
+    return null;
+  }
+
+  const record = content as Record<string, unknown>;
+
+  if (Array.isArray(record.sections)) {
+    const sections = record.sections
+      .map((section) => {
+        if (!section || typeof section !== "object") return null;
+        const item = section as Record<string, unknown>;
+        const title = cleanText(item.title);
+        const bullets = normalizeBullets(item.bullets);
+
+        if (!title && !bullets.length) return null;
+
+        return {
+          title: title || "Seccion personalizada",
+          bullets: bullets.length ? bullets : ["Contenido disponible en esta seccion."],
+        };
+      })
+      .filter(Boolean) as PremiumPlanSection[];
+
+    if (sections.length) {
+      return {
+        closing: cleanText(record.closing) || "Sigue este plan con constancia y ajustalo segun tu progreso.",
+        intro: cleanText(record.intro) || "Plan premium generado segun tu perfil actual.",
+        sections,
+        subtitle: cleanText(record.subtitle) || defaultSubtitle(planType),
+        title: cleanText(record.title) || defaultTitle(planType),
+      };
+    }
+  }
+
+  if (planType === "dieta" && Array.isArray(record.meals)) {
+    const sections = record.meals
+      .map((meal) => {
+        if (!meal || typeof meal !== "object") return null;
+        const item = meal as Record<string, unknown>;
+        const title = cleanText(item.meal) || "Comida";
+        const bullets = [
+          cleanText(item.items),
+          item.cal ? `Calorias estimadas: ${String(item.cal)}` : "",
+        ].filter(Boolean);
+
+        if (!bullets.length) return null;
+
+        return { title, bullets };
+      })
+      .filter(Boolean) as PremiumPlanSection[];
+
+    if (sections.length) {
+      return {
+        closing: `Macros estimados: Proteinas ${String((record.macros as any)?.proteinas ?? "-")}, Carbohidratos ${String((record.macros as any)?.carbohidratos ?? "-")}, Grasas ${String((record.macros as any)?.grasas ?? "-")}.`,
+        intro: "Migramos tu plan anterior al formato premium actual.",
+        sections,
+        subtitle: cleanText(record.totalCal ? `Total diario estimado: ${String(record.totalCal)}` : "") || defaultSubtitle(planType),
+        title: defaultTitle(planType),
+      };
+    }
+  }
+
+  if (planType === "rutina" && Array.isArray(record.days)) {
+    const sections = record.days
+      .map((day) => {
+        if (!day || typeof day !== "object") return null;
+        const item = day as Record<string, unknown>;
+        const title = `${cleanText(item.day) || "Dia"}${cleanText(item.focus) ? ` - ${cleanText(item.focus)}` : ""}`;
+        const bullets = [
+          cleanText(item.exercises),
+          cleanText(item.notes),
+        ].filter(Boolean);
+
+        if (!bullets.length) return null;
+
+        return { title, bullets };
+      })
+      .filter(Boolean) as PremiumPlanSection[];
+
+    if (sections.length) {
+      return {
+        closing: "Prioriza tecnica, progresion y recuperacion para sostener resultados.",
+        intro: "Migramos tu rutina anterior al formato premium actual.",
+        sections,
+        subtitle: defaultSubtitle(planType),
+        title: defaultTitle(planType),
+      };
+    }
+  }
+
+  const fallbackText = cleanText(record.rendered_text) || cleanText(record.text) || cleanText(record.summary);
+  if (fallbackText) {
+    return normalizePremiumPlan(fallbackText, planType);
+  }
+
+  return null;
+}
+
+export function normalizePlanForStorage(content: unknown, planType: "dieta" | "rutina") {
+  const normalized = normalizePremiumPlan(content, planType);
+
+  if (!normalized) {
+    throw new Error("No se pudo normalizar el plan generado");
+  }
+
+  return normalized;
 }
 
 function buildPrompt(planType: "dieta" | "rutina", profile: FitnessProfile) {
@@ -145,7 +317,8 @@ async function callGemini(planType: "dieta" | "rutina", profile: FitnessProfile)
   }
 
   try {
-    return JSON.parse(text) as PremiumPlan;
+    const parsed = JSON.parse(extractJsonText(text));
+    return normalizePlanForStorage(parsed, planType);
   } catch (error) {
     console.error("No se pudo parsear la respuesta de Gemini", { error, text, payload });
     throw new Error("No se pudo interpretar la respuesta de Gemini");
