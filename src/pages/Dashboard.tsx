@@ -12,7 +12,9 @@ import { toast } from "@/hooks/use-toast";
 import {
   answerNutritionConsultation,
   estimateDailyNutrition,
+  GEMINI_MISSING_MESSAGE,
   generateDietPlan,
+  isGeminiConfigured,
   generateWorkoutPlan,
   normalizePlanForStorage,
   normalizePremiumPlan,
@@ -255,6 +257,14 @@ function mealLabel(value: string) {
   }
 }
 
+function showGeminiMissingToast() {
+  toast({
+    title: "Gemini no esta disponible",
+    description: GEMINI_MISSING_MESSAGE,
+    variant: "destructive",
+  });
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { loading: authLoading, session, signOut, user } = useAuth();
@@ -441,6 +451,10 @@ export default function Dashboard() {
       navigate("/formulario");
       return;
     }
+    if (!isGeminiConfigured) {
+      showGeminiMissingToast();
+      return;
+    }
 
     setGenerating(planType);
 
@@ -599,6 +613,10 @@ export default function Dashboard() {
     event.preventDefault();
 
     if (!user || !profile) return;
+    if (!isGeminiConfigured) {
+      showGeminiMissingToast();
+      return;
+    }
     if (!hasPremiumAccess) {
       toast({
         title: "Funcion premium",
@@ -776,6 +794,10 @@ export default function Dashboard() {
     event.preventDefault();
 
     if (!user || !profile) return;
+    if (!isGeminiConfigured) {
+      showGeminiMissingToast();
+      return;
+    }
     if (!hasPremiumAccess) {
       toast({
         title: "Funcion premium",
@@ -1030,6 +1052,15 @@ export default function Dashboard() {
                 {latestCheckin ? `Adherencia ${latestCheckin.adherence_score ?? "-"} / 5` : "Todavia no registraste progreso"}
               </p>
             </div>
+          </div>
+        )}
+
+        {!isGeminiConfigured && (
+          <div className="mb-8 rounded-2xl border border-destructive/30 bg-destructive/10 p-5">
+            <h2 className="font-display text-lg font-semibold text-foreground">Gemini no esta configurado en este deploy</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {GEMINI_MISSING_MESSAGE}
+            </p>
           </div>
         )}
 

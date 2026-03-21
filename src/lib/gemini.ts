@@ -63,9 +63,15 @@ export type NutritionConsultation = {
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL ?? "gemini-2.5-flash";
 
+console.log("Gemini key:", import.meta.env.VITE_GEMINI_API_KEY);
+
+export const isGeminiConfigured = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
+export const GEMINI_MISSING_MESSAGE =
+  "Gemini no esta configurado en este deploy. Revisa Vercel, confirma VITE_GEMINI_API_KEY y vuelve a desplegar.";
+
 function ensureGeminiConfig() {
   if (!GEMINI_API_KEY) {
-    throw new Error("Falta VITE_GEMINI_API_KEY");
+    throw new Error(GEMINI_MISSING_MESSAGE);
   }
 }
 
