@@ -1,46 +1,71 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 
-function getEnv(name: string) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing environment variable: ${name}`);
+let cachedAdmin: SupabaseClient | null = null;
+let cachedAnon: SupabaseClient | null = null;
+
+function getEnv(...names: string[]) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) {
+      return value;
+    }
   }
-  return value;
+
+  console.error("Missing Supabase environment variables", {
+    available: names.map((name) => ({ name, present: Boolean(process.env[name]) })),
+  });
+
+  throw new Error(`Missing environment variable: ${names.join(" or ")}`);
 }
 
-export const supabaseAdmin = createClient(
-  getEnv("SUPABASE_URL"),
-  getEnv("SUPABASE_SERVICE_ROLE_KEY"),
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-);
+function getSupabaseUrl() {
+  return getEnv("VITE_SUPABASE_URL", "SUPABASE_URL");
+}
 
-const supabaseAnon = createClient(
-  getEnv("SUPABASE_URL"),
-  getEnv("SUPABASE_ANON_KEY"),
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  },
-);
+function getSupabaseAnonKey() {
+  return getEnv("VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_ANON_KEY");
+}
 
-export async function getAuthenticatedUser(request: Request) {
-  const authorization = request.headers.get("authorization");
-  const token = authorization?.replace("Bearer ", "").trim();
+function getSupabaseServiceRoleKey() {
+  return getEnv("SUPABASE_SERVICE_ROLE_KEY");
+}
 
-  if (!token) {
-    throw new Error("Missing Authorization header");
+export function getSupabaseAdmin() {
+  if (!cachedAdmin) {
+    cachedAdmin = createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
   }
 
-  const { data, error } = await supabaseAnon.auth.getUser(token);
+  return cachedAdmin;
+}
+
+function getSupabaseAnon() {
+  if (!cachedAnon) {
+    cachedAnon = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+
+  return cachedAnon;
+}
+
+export async function getAuthenticatedUserFromAccessToken(accessToken: string): Promise<User> {
+  if (!accessToken) {
+    console.error("Missing Authorization header in checkout request");
+    throw new Error("Unauthorized");
+  }
+
+  const { data, error } = await getSupabaseAnon().auth.getUser(accessToken);
+
   if (error || !data.user) {
-    console.error("Supabase auth error in API route", error);
+    console.error("Supabase auth error in API route", { error, hasUser: Boolean(data?.user) });
     throw new Error("Unauthorized");
   }
 

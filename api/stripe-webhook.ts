@@ -1,8 +1,32 @@
-import { supabaseAdmin } from "./_lib/supabase";
-import { stripe } from "./_lib/stripe";
+import { getSupabaseAdmin } from "./_lib/supabase";
+import { getStripeClient } from "./_lib/stripe";
+
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+function sendJson(res: any, status: number, payload: Record<string, unknown>) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(payload));
+}
 
 function toIsoDate(value: number | null | undefined) {
   return value ? new Date(value * 1000).toISOString() : null;
+}
+
+async function readRawBody(req: any) {
+  const chunks: Buffer[] = [];
+
+  return new Promise<string>((resolve, reject) => {
+    req.on("data", (chunk: Buffer | string) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", (error: Error) => reject(error));
+  });
 }
 
 async function upsertSubscription(data: {
@@ -13,7 +37,7 @@ async function upsertSubscription(data: {
   stripe_subscription_id: string | null;
   user_id: string;
 }) {
-  const { error } = await supabaseAdmin.from("subscriptions").upsert(data, {
+  const { error } = await getSupabaseAdmin().from("subscriptions").upsert(data, {
     onConflict: "user_id",
   });
 
@@ -32,7 +56,7 @@ async function resolveUserId(customerId: string | null, metadata?: Record<string
     return null;
   }
 
-  const { data } = await supabaseAdmin
+  const { data } = await getSupabaseAdmin()
     .from("subscriptions")
     .select("user_id")
     .eq("stripe_customer_id", customerId)
@@ -41,25 +65,30 @@ async function resolveUserId(customerId: string | null, metadata?: Record<string
   return data?.user_id ?? null;
 }
 
-async function handlePost(request: Request) {
+export default async function handler(req: any, res: any) {
+  if (req.method !== "POST") {
+    return sendJson(res, 405, { error: "Method not allowed" });
+  }
+
   try {
-    const signature = request.headers.get("stripe-signature");
+    const signature = req.headers["stripe-signature"];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!signature || !webhookSecret) {
-      return Response.json({ error: "Missing webhook configuration" }, { status: 400 });
+      return sendJson(res, 400, { error: "Missing webhook configuration" });
     }
 
-    const rawBody = await request.text();
+    const rawBody = await readRawBody(req);
+    const stripe = getStripeClient();
     const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
 
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
+      const session = event.data.object as any;
       const customerId = typeof session.customer === "string" ? session.customer : null;
       const userId = session.client_reference_id ?? await resolveUserId(customerId, session.metadata ?? {});
 
       if (userId && session.subscription) {
-        const subscription = await stripe.subscriptions.retrieve(String(session.subscription));
+        const subscription = await stripe.subscriptions.retrieve(String(session.subscription)) as any;
         await upsertSubscription({
           current_period_end: toIsoDate(subscription.current_period_end),
           status: subscription.status,
@@ -72,7 +101,7 @@ async function handlePost(request: Request) {
     }
 
     if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
-      const subscription = event.data.object;
+      const subscription = event.data.object as any;
       const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
       const userId = await resolveUserId(customerId, subscription.metadata ?? {});
 
@@ -88,19 +117,9 @@ async function handlePost(request: Request) {
       }
     }
 
-    return Response.json({ received: true });
+    return sendJson(res, 200, { received: true });
   } catch (error: any) {
     console.error("stripe-webhook failed", error);
-    return Response.json({ error: error.message ?? "Webhook failed" }, { status: 400 });
+    return sendJson(res, 400, { error: error?.message ?? "Webhook failed" });
   }
 }
-
-export default {
-  async fetch(request: Request) {
-    if (request.method !== "POST") {
-      return Response.json({ error: "Method not allowed" }, { status: 405 });
-    }
-
-    return handlePost(request);
-  },
-};

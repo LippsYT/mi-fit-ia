@@ -233,10 +233,27 @@ export default function Dashboard() {
         }),
       });
 
-      const payload = await response.json();
+      const rawText = await response.text();
+      let payload: { error?: string; url?: string } = {};
+
+      try {
+        payload = rawText ? JSON.parse(rawText) : {};
+      } catch (parseError) {
+        console.error("Checkout endpoint returned non-JSON response", {
+          parseError,
+          rawText,
+          status: response.status,
+        });
+        throw new Error("El backend de pago devolvio una respuesta invalida");
+      }
+
       if (!response.ok) {
         console.error("Error create-checkout-session", payload);
         throw new Error(payload.error ?? "No se pudo crear la sesion de checkout");
+      }
+
+      if (!payload.url) {
+        throw new Error("Stripe no devolvio una URL de checkout");
       }
 
       window.location.href = payload.url;
