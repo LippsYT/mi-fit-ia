@@ -37,6 +37,38 @@ serve(async (req) => {
 
     if (profileError || !profile) throw new Error("Perfil no encontrado. Completa el formulario primero.");
 
+    const { data: subscription } = await supabase
+      .from("subscriptions")
+      .select("status, current_period_end")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const hasActiveSubscription = Boolean(
+      profile.is_subscribed || (
+        subscription &&
+        ["active", "trialing"].includes(subscription.status) &&
+        (!subscription.current_period_end || new Date(subscription.current_period_end) > new Date())
+      )
+    );
+
+    if (!hasActiveSubscription) {
+      const { count } = await supabase
+        .from("generated_plans")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("plan_type", planType);
+
+      if ((count ?? 0) >= 1) {
+        return new Response(
+          JSON.stringify({ error: "La regeneracion ilimitada es una funcion premium. Activa tu suscripcion para desbloquearla." }),
+          {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 

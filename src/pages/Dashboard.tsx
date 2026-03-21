@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Calendar, Dumbbell, Loader2, Lock, RefreshCw, Sparkles, User, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dumbbell, RefreshCw, User, Lock, Utensils, Calendar, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -39,26 +39,48 @@ interface RoutinePlan {
   days: RoutineDay[];
 }
 
+interface Subscription {
+  current_period_end: string | null;
+  status: string | null;
+  stripe_customer_id: string | null;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, signOut, loading: authLoading } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [activeTab, setActiveTab] = useState<"dieta" | "rutina">("dieta");
   const [dietPlan, setDietPlan] = useState<DietPlan | null>(null);
   const [routinePlan, setRoutinePlan] = useState<RoutinePlan | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [billingLoading, setBillingLoading] = useState<"checkout" | "portal" | null>(null);
   const [loadingData, setLoadingData] = useState(true);
 
-  const isSubscribed = profile?.is_subscribed ?? false;
+  const isSubscribed = Boolean(
+    profile?.is_subscribed || (
+      subscription &&
+      ["active", "trialing"].includes(subscription.status || "") &&
+      (!subscription.current_period_end || new Date(subscription.current_period_end) > new Date())
+    )
+  );
 
   const fetchProfile = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase.from("profiles").select("peso, altura, edad, genero, objetivo, actividad, dias, is_subscribed").eq("id", user.id).single();
-    if (data) setProfile(data as Profile);
+    const { data } = await supabase
+      .from("profiles")
+      .select("peso, altura, edad, genero, objetivo, actividad, dias, is_subscribed")
+      .eq("id", user.id)
+      .single();
+
+    if (data) {
+      setProfile(data as Profile);
+    }
   }, [user]);
 
   const fetchPlans = useCallback(async () => {
     if (!user) return;
+
     const { data: plans } = await supabase
       .from("generated_plans")
       .select("plan_type, content, created_at")
@@ -66,24 +88,106 @@ export default function Dashboard() {
       .order("created_at", { ascending: false });
 
     if (plans) {
-      const diet = plans.find((p: any) => p.plan_type === "dieta");
-      const routine = plans.find((p: any) => p.plan_type === "rutina");
+      const diet = plans.find((plan: any) => plan.plan_type === "dieta");
+      const routine = plans.find((plan: any) => plan.plan_type === "rutina");
       if (diet) setDietPlan(diet.content as unknown as DietPlan);
       if (routine) setRoutinePlan(routine.content as unknown as RoutinePlan);
     }
   }, [user]);
 
+  const fetchSubscription = useCallback(async () => {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("subscriptions")
+      .select("status, current_period_end, stripe_customer_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (data) {
+      setSubscription(data as Subscription);
+    } else {
+      setSubscription(null);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (authLoading) return;
-    if (!user) { navigate("/login"); return; }
+    if (!user) {
+      navigate("/login");
+      return;
+    }
 
     const load = async () => {
       setLoadingData(true);
-      await Promise.all([fetchProfile(), fetchPlans()]);
+      await Promise.all([fetchProfile(), fetchPlans(), fetchSubscription()]);
       setLoadingData(false);
     };
-    load();
-  }, [user, authLoading, navigate, fetchProfile, fetchPlans]);
+
+    void load();
+  }, [user, authLoading, navigate, fetchProfile, fetchPlans, fetchSubscription]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkoutStatus = params.get("checkout");
+
+    if (!checkoutStatus) return;
+
+    if (checkoutStatus === "success") {
+      toast({
+        title: "Pago confirmado",
+        description: "Tu suscripcion se esta sincronizando con Stripe.",
+      });
+      void fetchProfile();
+      void fetchSubscription();
+    }
+
+    if (checkoutStatus === "cancelled") {
+      toast({
+        title: "Checkout cancelado",
+        description: "Puedes volver a intentarlo cuando quieras.",
+      });
+    }
+
+    params.delete("checkout");
+    const nextQuery = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
+  }, [fetchProfile, fetchSubscription]);
+
+  const openBillingFlow = async (functionName: "create-checkout-session" | "create-portal-session") => {
+    const { data, error } = await supabase.functions.invoke(functionName, { body: {} });
+    if (error) throw error;
+    if (!data?.url) throw new Error("No se recibio una URL de Stripe");
+    window.location.href = data.url;
+  };
+
+  const handleSubscribe = async () => {
+    setBillingLoading("checkout");
+    try {
+      await openBillingFlow("create-checkout-session");
+    } catch (error: any) {
+      toast({
+        title: "No se pudo abrir Stripe",
+        description: error.message,
+        variant: "destructive",
+      });
+      setBillingLoading(null);
+    }
+  };
+
+  const handleManageBilling = async () => {
+    setBillingLoading("portal");
+    try {
+      await openBillingFlow("create-portal-session");
+    } catch (error: any) {
+      toast({
+        title: "No se pudo abrir el portal",
+        description: error.message,
+        variant: "destructive",
+      });
+      setBillingLoading(null);
+    }
+  };
 
   const generatePlan = async (planType: "dieta" | "rutina") => {
     if (!profile?.peso) {
@@ -93,6 +197,7 @@ export default function Dashboard() {
     }
 
     setGenerating(true);
+
     try {
       const { data, error } = await supabase.functions.invoke("generate-plan", {
         body: { planType },
@@ -101,12 +206,19 @@ export default function Dashboard() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      if (planType === "dieta") setDietPlan(data.plan);
-      else setRoutinePlan(data.plan);
+      if (planType === "dieta") {
+        setDietPlan(data.plan);
+      } else {
+        setRoutinePlan(data.plan);
+      }
 
-      toast({ title: `¡${planType === "dieta" ? "Dieta" : "Rutina"} generada!` });
-    } catch (err: any) {
-      toast({ title: "Error generando plan", description: err.message, variant: "destructive" });
+      toast({ title: `Plan de ${planType === "dieta" ? "dieta" : "rutina"} generado` });
+    } catch (error: any) {
+      toast({
+        title: "Error generando plan",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setGenerating(false);
     }
@@ -114,7 +226,7 @@ export default function Dashboard() {
 
   const objectiveLabels: Record<string, string> = {
     "perder-peso": "Perder peso",
-    "ganar-musculo": "Ganar músculo",
+    "ganar-musculo": "Ganar musculo",
     "tonificar": "Tonificar",
     "mantener": "Mantener peso",
   };
@@ -131,7 +243,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen">
-      {/* Top bar */}
       <header className="border-b border-border/30 bg-background/80 backdrop-blur-xl">
         <div className="container mx-auto flex h-16 items-center justify-between section-padding">
           <Link to="/" className="flex items-center gap-2 font-display text-xl font-bold tracking-tight">
@@ -139,24 +250,41 @@ export default function Dashboard() {
             <span>FIT AI</span>
             <span className="text-primary">SYSTEM</span>
           </Link>
+
           <div className="flex items-center gap-3">
+            {isSubscribed && (
+              <Button variant="ghost" size="sm" onClick={() => void handleManageBilling()} disabled={billingLoading === "portal"}>
+                {billingLoading === "portal" ? "Abriendo..." : "Facturacion"}
+              </Button>
+            )}
             <Link to="/formulario">
-              <Button variant="ghost" size="sm"><User className="mr-1 h-4 w-4" />Editar datos</Button>
+              <Button variant="ghost" size="sm">
+                <User className="mr-1 h-4 w-4" />
+                Editar datos
+              </Button>
             </Link>
-            <Button variant="ghost" size="sm" onClick={() => { signOut(); navigate("/"); }}>Salir</Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                void signOut();
+                navigate("/");
+              }}
+            >
+              Salir
+            </Button>
           </div>
         </div>
       </header>
 
       <main className="container mx-auto section-padding py-8">
-        {/* Profile summary */}
         {hasProfile && (
           <div className="mb-8 glass-card rounded-xl p-6">
             <h2 className="mb-3 font-display text-lg font-semibold">Tu perfil</h2>
             <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
               <div><span className="text-muted-foreground">Peso:</span> <span className="font-medium">{profile.peso} kg</span></div>
               <div><span className="text-muted-foreground">Altura:</span> <span className="font-medium">{profile.altura} cm</span></div>
-              <div><span className="text-muted-foreground">Edad:</span> <span className="font-medium">{profile.edad} años</span></div>
+              <div><span className="text-muted-foreground">Edad:</span> <span className="font-medium">{profile.edad} anos</span></div>
               <div><span className="text-muted-foreground">Objetivo:</span> <span className="font-medium">{objectiveLabels[profile.objetivo || ""] || profile.objetivo}</span></div>
             </div>
           </div>
@@ -173,17 +301,17 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Tabs */}
         <div className="mb-6 flex gap-2">
           <Button variant={activeTab === "dieta" ? "default" : "secondary"} onClick={() => setActiveTab("dieta")} size="sm">
-            <Utensils className="mr-1 h-4 w-4" />Plan de dieta
+            <Utensils className="mr-1 h-4 w-4" />
+            Plan de dieta
           </Button>
           <Button variant={activeTab === "rutina" ? "default" : "secondary"} onClick={() => setActiveTab("rutina")} size="sm">
-            <Calendar className="mr-1 h-4 w-4" />Rutina semanal
+            <Calendar className="mr-1 h-4 w-4" />
+            Rutina semanal
           </Button>
         </div>
 
-        {/* Content */}
         <div className="relative">
           {activeTab === "dieta" && (
             <div className="space-y-3">
@@ -193,9 +321,13 @@ export default function Dashboard() {
                   variant="outline"
                   size="sm"
                   disabled={generating || !hasProfile}
-                  onClick={() => generatePlan("dieta")}
+                  onClick={() => void generatePlan("dieta")}
                 >
-                  {generating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
+                  {generating ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-1 h-4 w-4" />
+                  )}
                   {dietPlan ? "Regenerar" : "Generar"}
                 </Button>
               </div>
@@ -204,8 +336,9 @@ export default function Dashboard() {
                 <div className="glass-card rounded-xl p-8 text-center">
                   <Utensils className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
                   <p className="text-muted-foreground">Genera tu plan de dieta personalizado con IA</p>
-                  <Button className="mt-4" onClick={() => generatePlan("dieta")} disabled={!hasProfile}>
-                    <Sparkles className="mr-2 h-4 w-4" />Generar dieta
+                  <Button className="mt-4" onClick={() => void generatePlan("dieta")} disabled={!hasProfile}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Generar dieta
                   </Button>
                 </div>
               )}
@@ -217,13 +350,13 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {dietPlan && !generating && dietPlan.meals.map((meal, i) => (
-                <div key={i} className="glass-card rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-1">
+              {dietPlan && !generating && dietPlan.meals.map((meal, index) => (
+                <div key={index} className="glass-card rounded-xl p-5">
+                  <div className="mb-1 flex items-center justify-between">
                     <h3 className="font-display font-semibold text-primary">{meal.meal}</h3>
                     <span className="text-xs font-medium tabular-nums text-muted-foreground">{meal.cal}</span>
                   </div>
-                  <p className={`text-sm ${!isSubscribed && i > 1 ? "blur-sm select-none" : ""}`}>
+                  <p className={`text-sm ${!isSubscribed && index > 1 ? "select-none blur-sm" : ""}`}>
                     {meal.items}
                   </p>
                 </div>
@@ -235,8 +368,8 @@ export default function Dashboard() {
                     <span className="font-display font-semibold">Total</span>
                     <span className="font-medium tabular-nums text-primary">{dietPlan.totalCal}</span>
                   </div>
-                  <div className={`mt-2 flex gap-4 text-xs text-muted-foreground ${!isSubscribed ? "blur-sm select-none" : ""}`}>
-                    <span>Proteínas: {dietPlan.macros.proteinas}</span>
+                  <div className={`mt-2 flex gap-4 text-xs text-muted-foreground ${!isSubscribed ? "select-none blur-sm" : ""}`}>
+                    <span>Proteinas: {dietPlan.macros.proteinas}</span>
                     <span>Carbos: {dietPlan.macros.carbohidratos}</span>
                     <span>Grasas: {dietPlan.macros.grasas}</span>
                   </div>
@@ -253,9 +386,13 @@ export default function Dashboard() {
                   variant="outline"
                   size="sm"
                   disabled={generating || !hasProfile}
-                  onClick={() => generatePlan("rutina")}
+                  onClick={() => void generatePlan("rutina")}
                 >
-                  {generating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
+                  {generating ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-1 h-4 w-4" />
+                  )}
                   {routinePlan ? "Regenerar" : "Generar"}
                 </Button>
               </div>
@@ -264,8 +401,9 @@ export default function Dashboard() {
                 <div className="glass-card rounded-xl p-8 text-center">
                   <Calendar className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
                   <p className="text-muted-foreground">Genera tu rutina semanal personalizada con IA</p>
-                  <Button className="mt-4" onClick={() => generatePlan("rutina")} disabled={!hasProfile}>
-                    <Sparkles className="mr-2 h-4 w-4" />Generar rutina
+                  <Button className="mt-4" onClick={() => void generatePlan("rutina")} disabled={!hasProfile}>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Generar rutina
                   </Button>
                 </div>
               )}
@@ -277,13 +415,13 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {routinePlan && !generating && routinePlan.days.map((day, i) => (
-                <div key={i} className="glass-card rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-1">
+              {routinePlan && !generating && routinePlan.days.map((day, index) => (
+                <div key={index} className="glass-card rounded-xl p-5">
+                  <div className="mb-1 flex items-center justify-between">
                     <h3 className="font-display font-semibold">{day.day}</h3>
                     <span className="text-xs font-medium text-primary">{day.focus}</span>
                   </div>
-                  <p className={`text-sm text-muted-foreground ${!isSubscribed && i > 1 ? "blur-sm select-none" : ""}`}>
+                  <p className={`text-sm text-muted-foreground ${!isSubscribed && index > 1 ? "select-none blur-sm" : ""}`}>
                     {day.exercises}
                   </p>
                 </div>
@@ -291,13 +429,14 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Paywall overlay */}
           {!isSubscribed && (dietPlan || routinePlan) && (
-            <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-background via-background/95 to-transparent flex flex-col items-center justify-end pb-8">
+            <div className="absolute bottom-0 left-0 right-0 flex h-64 flex-col items-center justify-end bg-gradient-to-t from-background via-background/95 to-transparent pb-8">
               <Lock className="mb-3 h-8 w-8 text-primary" />
               <h3 className="mb-2 font-display text-lg font-bold">Desbloquea tu plan completo</h3>
-              <p className="mb-4 text-sm text-muted-foreground">Suscríbete por solo $7/mes</p>
-              <Button variant="hero" size="lg">Suscribirse ahora</Button>
+              <p className="mb-4 text-sm text-muted-foreground">Suscribete por solo AR$ 15.000/mes</p>
+              <Button variant="hero" size="lg" onClick={() => void handleSubscribe()} disabled={billingLoading === "checkout"}>
+                {billingLoading === "checkout" ? "Redirigiendo..." : "Suscribirse ahora"}
+              </Button>
             </div>
           )}
         </div>
