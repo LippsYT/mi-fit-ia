@@ -1,234 +1,253 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Calendar, Dumbbell, Loader2, Lock, RefreshCw, Sparkles, User, Utensils } from "lucide-react";
+import { Calendar, Crown, Dumbbell, Loader2, Lock, Sparkles, User, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { generateDietPlan, generateWorkoutPlan, type FitnessProfile, type PremiumPlan } from "@/lib/gemini";
 
-interface Profile {
-  peso: number | null;
-  altura: number | null;
-  edad: number | null;
-  genero: string | null;
-  objetivo: string | null;
-  actividad: string | null;
-  dias: number | null;
-  is_subscribed: boolean;
-}
+type StoredPlan = {
+  content: PremiumPlan;
+  created_at: string;
+  plan_type: "dieta" | "rutina";
+};
 
-interface DietMeal {
-  meal: string;
-  items: string;
-  cal: string;
-}
-
-interface DietPlan {
-  meals: DietMeal[];
-  totalCal: string;
-  macros: { proteinas: string; carbohidratos: string; grasas: string };
-}
-
-interface RoutineDay {
-  day: string;
-  focus: string;
-  exercises: string;
-}
-
-interface RoutinePlan {
-  days: RoutineDay[];
-}
-
-interface Subscription {
+type SubscriptionRow = {
   current_period_end: string | null;
-  status: string | null;
+  status: string;
   stripe_customer_id: string | null;
+};
+
+const previewSections = 2;
+
+function isActiveSubscription(subscription: SubscriptionRow | null) {
+  if (!subscription) return false;
+  if (!["active", "trialing"].includes(subscription.status)) return false;
+  if (!subscription.current_period_end) return true;
+  return new Date(subscription.current_period_end) > new Date();
+}
+
+function normalizePlan(content: any, planType: "dieta" | "rutina"): PremiumPlan {
+  if (content?.sections && Array.isArray(content.sections)) {
+    return content as PremiumPlan;
+  }
+
+  if (planType === "dieta" && Array.isArray(content?.meals)) {
+    return {
+      closing: `Macros estimados: Proteinas ${content?.macros?.proteinas ?? "-"}, Carbohidratos ${content?.macros?.carbohidratos ?? "-"}, Grasas ${content?.macros?.grasas ?? "-"}.`,
+      intro: "Convertimos tu plan guardado anterior a la nueva vista premium.",
+      sections: content.meals.map((meal: any) => ({
+        title: meal.meal ?? "Comida",
+        bullets: [meal.items ?? "", `Calorias estimadas: ${meal.cal ?? "-"}`],
+      })),
+      subtitle: `Total diario estimado: ${content?.totalCal ?? "-"}`,
+      title: "Plan de alimentacion personalizado",
+    };
+  }
+
+  if (planType === "rutina" && Array.isArray(content?.days)) {
+    return {
+      closing: "Sigue una progresion gradual y prioriza tecnica, descanso y constancia.",
+      intro: "Convertimos tu rutina guardada anterior a la nueva vista premium.",
+      sections: content.days.map((day: any) => ({
+        title: `${day.day ?? "Dia"} - ${day.focus ?? "Enfoque"}`,
+        bullets: [day.exercises ?? ""],
+      })),
+      subtitle: "Rutina semanal personalizada",
+      title: "Plan de entrenamiento premium",
+    };
+  }
+
+  return {
+    closing: "Genera nuevamente tu plan para obtener una version premium completa.",
+    intro: "No pudimos interpretar el plan guardado con el formato actual.",
+    sections: [],
+    subtitle: "Contenido antiguo no compatible",
+    title: "Plan pendiente de regeneracion",
+  };
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, signOut, loading: authLoading } = useAuth();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const { loading: authLoading, session, signOut, user } = useAuth();
+  const [profile, setProfile] = useState<FitnessProfile | null>(null);
+  const [dietPlan, setDietPlan] = useState<StoredPlan | null>(null);
+  const [workoutPlan, setWorkoutPlan] = useState<StoredPlan | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionRow | null>(null);
   const [activeTab, setActiveTab] = useState<"dieta" | "rutina">("dieta");
-  const [dietPlan, setDietPlan] = useState<DietPlan | null>(null);
-  const [routinePlan, setRoutinePlan] = useState<RoutinePlan | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [billingLoading, setBillingLoading] = useState<"checkout" | "portal" | null>(null);
   const [loadingData, setLoadingData] = useState(true);
+  const [generating, setGenerating] = useState<"dieta" | "rutina" | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
-  const isSubscribed = Boolean(
-    profile?.is_subscribed || (
-      subscription &&
-      ["active", "trialing"].includes(subscription.status || "") &&
-      (!subscription.current_period_end || new Date(subscription.current_period_end) > new Date())
-    )
-  );
-
-  const fetchProfile = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from("profiles")
-      .select("peso, altura, edad, genero, objetivo, actividad, dias, is_subscribed")
-      .eq("id", user.id)
-      .single();
-
-    if (data) {
-      setProfile(data as Profile);
-    }
-  }, [user]);
-
-  const fetchPlans = useCallback(async () => {
-    if (!user) return;
-
-    const { data: plans } = await supabase
-      .from("generated_plans")
-      .select("plan_type, content, created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (plans) {
-      const diet = plans.find((plan: any) => plan.plan_type === "dieta");
-      const routine = plans.find((plan: any) => plan.plan_type === "rutina");
-      if (diet) setDietPlan(diet.content as unknown as DietPlan);
-      if (routine) setRoutinePlan(routine.content as unknown as RoutinePlan);
-    }
-  }, [user]);
-
-  const fetchSubscription = useCallback(async () => {
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("subscriptions")
-      .select("status, current_period_end, stripe_customer_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (data) {
-      setSubscription(data as Subscription);
-    } else {
-      setSubscription(null);
-    }
-  }, [user]);
+  const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
+  const activePlan = activeTab === "dieta" ? dietPlan : workoutPlan;
 
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      navigate("/login");
+      navigate("/login", { replace: true });
       return;
     }
 
-    const load = async () => {
+    const loadDashboard = async () => {
       setLoadingData(true);
-      await Promise.all([fetchProfile(), fetchPlans(), fetchSubscription()]);
+
+      const [profileResult, plansResult, subscriptionResult] = await Promise.all([
+        supabase
+          .from("fitness_profiles")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase
+          .from("generated_plans")
+          .select("content, created_at, plan_type")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("subscriptions")
+          .select("status, current_period_end, stripe_customer_id")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+      ]);
+
+      if (profileResult.error) {
+        console.error("Error cargando fitness_profiles", profileResult.error);
+      }
+      if (plansResult.error) {
+        console.error("Error cargando generated_plans", plansResult.error);
+      }
+      if (subscriptionResult.error) {
+        console.error("Error cargando subscriptions", subscriptionResult.error);
+      }
+
+      setProfile((profileResult.data as FitnessProfile | null) ?? null);
+
+      const plans = (plansResult.data ?? []) as StoredPlan[];
+      const latestDiet = plans.find((plan) => plan.plan_type === "dieta") ?? null;
+      const latestWorkout = plans.find((plan) => plan.plan_type === "rutina") ?? null;
+      setDietPlan(latestDiet ? { ...latestDiet, content: normalizePlan(latestDiet.content, "dieta") } : null);
+      setWorkoutPlan(latestWorkout ? { ...latestWorkout, content: normalizePlan(latestWorkout.content, "rutina") } : null);
+      setSubscription((subscriptionResult.data as SubscriptionRow | null) ?? null);
       setLoadingData(false);
     };
 
-    void load();
-  }, [user, authLoading, navigate, fetchProfile, fetchPlans, fetchSubscription]);
+    void loadDashboard();
+  }, [authLoading, navigate, user]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const checkoutStatus = params.get("checkout");
-
-    if (!checkoutStatus) return;
-
-    if (checkoutStatus === "success") {
+    if (params.get("subscribed") === "true") {
       toast({
-        title: "Pago confirmado",
-        description: "Tu suscripcion se esta sincronizando con Stripe.",
+        title: "Suscripcion activada",
+        description: "Tu cuenta premium ya puede desbloquear el dashboard completo.",
       });
-      void fetchProfile();
-      void fetchSubscription();
+      params.delete("subscribed");
+      const nextQuery = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
     }
+  }, []);
 
-    if (checkoutStatus === "cancelled") {
+  const handleGenerate = async (planType: "dieta" | "rutina") => {
+    if (!user) return;
+    if (!profile) {
       toast({
-        title: "Checkout cancelado",
-        description: "Puedes volver a intentarlo cuando quieras.",
-      });
-    }
-
-    params.delete("checkout");
-    const nextQuery = params.toString();
-    window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
-  }, [fetchProfile, fetchSubscription]);
-
-  const openBillingFlow = async (functionName: "create-checkout-session" | "create-portal-session") => {
-    const { data, error } = await supabase.functions.invoke(functionName, { body: {} });
-    if (error) throw error;
-    if (!data?.url) throw new Error("No se recibio una URL de Stripe");
-    window.location.href = data.url;
-  };
-
-  const handleSubscribe = async () => {
-    setBillingLoading("checkout");
-    try {
-      await openBillingFlow("create-checkout-session");
-    } catch (error: any) {
-      toast({
-        title: "No se pudo abrir Stripe",
-        description: error.message,
+        title: "Completa tu onboarding primero",
+        description: "Necesitamos tus datos para generar el plan.",
         variant: "destructive",
       });
-      setBillingLoading(null);
-    }
-  };
-
-  const handleManageBilling = async () => {
-    setBillingLoading("portal");
-    try {
-      await openBillingFlow("create-portal-session");
-    } catch (error: any) {
-      toast({
-        title: "No se pudo abrir el portal",
-        description: error.message,
-        variant: "destructive",
-      });
-      setBillingLoading(null);
-    }
-  };
-
-  const generatePlan = async (planType: "dieta" | "rutina") => {
-    if (!profile?.peso) {
-      toast({ title: "Completa tu perfil primero", variant: "destructive" });
       navigate("/formulario");
       return;
     }
 
-    setGenerating(true);
+    setGenerating(planType);
 
     try {
-      const { data, error } = await supabase.functions.invoke("generate-plan", {
-        body: { planType },
+      const content = planType === "dieta"
+        ? await generateDietPlan(profile)
+        : await generateWorkoutPlan(profile);
+
+      const { error } = await supabase.from("generated_plans").insert({
+        user_id: user.id,
+        plan_type: planType,
+        content,
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      if (planType === "dieta") {
-        setDietPlan(data.plan);
-      } else {
-        setRoutinePlan(data.plan);
+      if (error) {
+        console.error("Error guardando generated_plans", error, { planType, content });
+        throw error;
       }
 
-      toast({ title: `Plan de ${planType === "dieta" ? "dieta" : "rutina"} generado` });
-    } catch (error: any) {
+      const storedPlan: StoredPlan = {
+        content,
+        created_at: new Date().toISOString(),
+        plan_type: planType,
+      };
+
+      if (planType === "dieta") {
+        setDietPlan(storedPlan);
+      } else {
+        setWorkoutPlan(storedPlan);
+      }
+
       toast({
-        title: "Error generando plan",
-        description: error.message,
+        title: planType === "dieta" ? "Plan de alimentacion generado" : "Rutina generada",
+        description: hasPremiumAccess
+          ? "Ya tienes acceso completo al resultado."
+          : "Se genero una vista previa premium con CTA de suscripcion.",
+      });
+    } catch (error: any) {
+      console.error(`Error generando plan ${planType}`, error);
+      toast({
+        title: "No se pudo generar el plan",
+        description: error.message ?? "Error inesperado",
         variant: "destructive",
       });
     } finally {
-      setGenerating(false);
+      setGenerating(null);
     }
   };
 
-  const objectiveLabels: Record<string, string> = {
-    "perder-peso": "Perder peso",
-    "ganar-musculo": "Ganar musculo",
-    "tonificar": "Tonificar",
-    "mantener": "Mantener peso",
+  const handleSubscribe = async () => {
+    if (!session?.access_token || !user) {
+      toast({
+        title: "Debes iniciar sesion",
+        description: "No pudimos validar tu sesion para Stripe.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCheckoutLoading(true);
+
+    try {
+      const response = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          email: user.email,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        console.error("Error create-checkout-session", payload);
+        throw new Error(payload.error ?? "No se pudo crear la sesion de checkout");
+      }
+
+      window.location.href = payload.url;
+    } catch (error: any) {
+      toast({
+        title: "No se pudo iniciar el pago",
+        description: error.message ?? "Error inesperado",
+        variant: "destructive",
+      });
+      setCheckoutLoading(false);
+    }
   };
 
   if (authLoading || loadingData) {
@@ -239,7 +258,14 @@ export default function Dashboard() {
     );
   }
 
-  const hasProfile = profile?.peso && profile?.objetivo;
+  const profileSummary = profile
+    ? [
+        `Peso: ${profile.weight ?? "-"} kg`,
+        `Altura: ${profile.height ?? "-"} cm`,
+        `Edad: ${profile.age ?? "-"}`,
+        `Objetivo: ${profile.goal ?? "-"}`,
+      ]
+    : [];
 
   return (
     <div className="min-h-screen">
@@ -252,11 +278,6 @@ export default function Dashboard() {
           </Link>
 
           <div className="flex items-center gap-3">
-            {isSubscribed && (
-              <Button variant="ghost" size="sm" onClick={() => void handleManageBilling()} disabled={billingLoading === "portal"}>
-                {billingLoading === "portal" ? "Abriendo..." : "Facturacion"}
-              </Button>
-            )}
             <Link to="/formulario">
               <Button variant="ghost" size="sm">
                 <User className="mr-1 h-4 w-4" />
@@ -268,7 +289,7 @@ export default function Dashboard() {
               size="sm"
               onClick={() => {
                 void signOut();
-                navigate("/");
+                navigate("/", { replace: true });
               }}
             >
               Salir
@@ -278,25 +299,54 @@ export default function Dashboard() {
       </header>
 
       <main className="container mx-auto section-padding py-8">
-        {hasProfile && (
+        <div className="mb-6 glass-card rounded-2xl p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="font-display text-2xl font-bold">
+                {hasPremiumAccess ? "Dashboard premium" : "Vista previa premium"}
+              </h1>
+              <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+                {hasPremiumAccess
+                  ? "Tu suscripcion esta activa. Puedes ver el contenido completo del dashboard."
+                  : "Estas viendo una version limitada. Activa tu suscripcion mensual para desbloquear dieta y rutina completas."}
+              </p>
+            </div>
+            {!hasPremiumAccess && (
+              <Button variant="hero" onClick={() => void handleSubscribe()} disabled={checkoutLoading}>
+                {checkoutLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Redirigiendo...
+                  </>
+                ) : (
+                  <>
+                    <Crown className="mr-2 h-4 w-4" />
+                    Suscribirme por AR$ 15.000
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {profile ? (
           <div className="mb-8 glass-card rounded-xl p-6">
-            <h2 className="mb-3 font-display text-lg font-semibold">Tu perfil</h2>
+            <h2 className="mb-3 font-display text-lg font-semibold">Tu perfil fitness</h2>
             <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-              <div><span className="text-muted-foreground">Peso:</span> <span className="font-medium">{profile.peso} kg</span></div>
-              <div><span className="text-muted-foreground">Altura:</span> <span className="font-medium">{profile.altura} cm</span></div>
-              <div><span className="text-muted-foreground">Edad:</span> <span className="font-medium">{profile.edad} anos</span></div>
-              <div><span className="text-muted-foreground">Objetivo:</span> <span className="font-medium">{objectiveLabels[profile.objetivo || ""] || profile.objetivo}</span></div>
+              {profileSummary.map((item) => (
+                <div key={item} className="font-medium text-foreground">
+                  {item}
+                </div>
+              ))}
             </div>
           </div>
-        )}
-
-        {!hasProfile && (
+        ) : (
           <div className="mb-8 glass-card rounded-xl p-8 text-center">
             <Sparkles className="mx-auto mb-3 h-10 w-10 text-primary" />
-            <h2 className="mb-2 font-display text-xl font-bold">Completa tu perfil</h2>
-            <p className="mb-4 text-sm text-muted-foreground">Necesitamos tus datos para generar planes personalizados con IA</p>
+            <h2 className="mb-2 font-display text-xl font-bold">Completa tu onboarding</h2>
+            <p className="mb-4 text-sm text-muted-foreground">Necesitamos tu perfil para personalizar los planes.</p>
             <Link to="/formulario">
-              <Button>Completar perfil</Button>
+              <Button>Completar ahora</Button>
             </Link>
           </div>
         )}
@@ -312,130 +362,86 @@ export default function Dashboard() {
           </Button>
         </div>
 
-        <div className="relative">
-          {activeTab === "dieta" && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="font-display text-xl font-bold">Tu Plan de Dieta</h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={generating || !hasProfile}
-                  onClick={() => void generatePlan("dieta")}
-                >
-                  {generating ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-1 h-4 w-4" />
-                  )}
-                  {dietPlan ? "Regenerar" : "Generar"}
-                </Button>
-              </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-xl font-bold">
+                {activeTab === "dieta" ? "Tu dieta personalizada" : "Tu rutina personalizada"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {activePlan?.created_at
+                  ? `Ultima generacion: ${new Date(activePlan.created_at).toLocaleString("es-AR")}`
+                  : "Todavia no generaste este plan."}
+              </p>
+            </div>
 
-              {!dietPlan && !generating && (
-                <div className="glass-card rounded-xl p-8 text-center">
-                  <Utensils className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-                  <p className="text-muted-foreground">Genera tu plan de dieta personalizado con IA</p>
-                  <Button className="mt-4" onClick={() => void generatePlan("dieta")} disabled={!hasProfile}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Generar dieta
-                  </Button>
-                </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleGenerate(activeTab)}
+              disabled={Boolean(generating) || !profile}
+            >
+              {generating === activeTab ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generando...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  {activePlan ? "Regenerar" : "Generar"}
+                </>
               )}
+            </Button>
+          </div>
 
-              {generating && activeTab === "dieta" && (
-                <div className="glass-card rounded-xl p-8 text-center">
-                  <Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-primary" />
-                  <p className="text-muted-foreground">Generando tu plan personalizado con IA...</p>
-                </div>
-              )}
-
-              {dietPlan && !generating && dietPlan.meals.map((meal, index) => (
-                <div key={index} className="glass-card rounded-xl p-5">
-                  <div className="mb-1 flex items-center justify-between">
-                    <h3 className="font-display font-semibold text-primary">{meal.meal}</h3>
-                    <span className="text-xs font-medium tabular-nums text-muted-foreground">{meal.cal}</span>
-                  </div>
-                  <p className={`text-sm ${!isSubscribed && index > 1 ? "select-none blur-sm" : ""}`}>
-                    {meal.items}
-                  </p>
-                </div>
-              ))}
-
-              {dietPlan && !generating && (
-                <div className="glass-card rounded-xl p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-display font-semibold">Total</span>
-                    <span className="font-medium tabular-nums text-primary">{dietPlan.totalCal}</span>
-                  </div>
-                  <div className={`mt-2 flex gap-4 text-xs text-muted-foreground ${!isSubscribed ? "select-none blur-sm" : ""}`}>
-                    <span>Proteinas: {dietPlan.macros.proteinas}</span>
-                    <span>Carbos: {dietPlan.macros.carbohidratos}</span>
-                    <span>Grasas: {dietPlan.macros.grasas}</span>
-                  </div>
-                </div>
-              )}
+          {!activePlan && (
+            <div className="glass-card rounded-xl p-8 text-center">
+              <Sparkles className="mx-auto mb-3 h-10 w-10 text-primary" />
+              <p className="text-sm text-muted-foreground">
+                Genera tu primer plan con Gemini para ver una vista previa premium.
+              </p>
             </div>
           )}
 
-          {activeTab === "rutina" && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="font-display text-xl font-bold">Tu Rutina Semanal</h2>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={generating || !hasProfile}
-                  onClick={() => void generatePlan("rutina")}
-                >
-                  {generating ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-1 h-4 w-4" />
-                  )}
-                  {routinePlan ? "Regenerar" : "Generar"}
-                </Button>
+          {activePlan && (
+            <div className="glass-card rounded-2xl p-6">
+              <h3 className="font-display text-2xl font-bold">{activePlan.content.title}</h3>
+              <p className="mt-1 text-sm text-primary">{activePlan.content.subtitle}</p>
+              <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{activePlan.content.intro}</p>
+
+              <div className="mt-6 space-y-4">
+                {activePlan.content.sections.map((section, index) => {
+                  const locked = !hasPremiumAccess && index >= previewSections;
+
+                  return (
+                    <div key={section.title} className="rounded-xl border border-border/60 bg-background/20 p-4">
+                      <h4 className="font-display text-lg font-semibold">{section.title}</h4>
+                      <ul className={`mt-3 space-y-2 text-sm text-muted-foreground ${locked ? "select-none blur-sm" : ""}`}>
+                        {section.bullets.map((bullet) => (
+                          <li key={bullet}>- {bullet}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
               </div>
 
-              {!routinePlan && !generating && (
-                <div className="glass-card rounded-xl p-8 text-center">
-                  <Calendar className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-                  <p className="text-muted-foreground">Genera tu rutina semanal personalizada con IA</p>
-                  <Button className="mt-4" onClick={() => void generatePlan("rutina")} disabled={!hasProfile}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Generar rutina
-                  </Button>
-                </div>
-              )}
-
-              {generating && activeTab === "rutina" && (
-                <div className="glass-card rounded-xl p-8 text-center">
-                  <Loader2 className="mx-auto mb-3 h-10 w-10 animate-spin text-primary" />
-                  <p className="text-muted-foreground">Generando tu rutina personalizada con IA...</p>
-                </div>
-              )}
-
-              {routinePlan && !generating && routinePlan.days.map((day, index) => (
-                <div key={index} className="glass-card rounded-xl p-5">
-                  <div className="mb-1 flex items-center justify-between">
-                    <h3 className="font-display font-semibold">{day.day}</h3>
-                    <span className="text-xs font-medium text-primary">{day.focus}</span>
-                  </div>
-                  <p className={`text-sm text-muted-foreground ${!isSubscribed && index > 1 ? "select-none blur-sm" : ""}`}>
-                    {day.exercises}
-                  </p>
-                </div>
-              ))}
+              <p className={`mt-6 text-sm leading-relaxed text-muted-foreground ${!hasPremiumAccess ? "select-none blur-sm" : ""}`}>
+                {activePlan.content.closing}
+              </p>
             </div>
           )}
 
-          {!isSubscribed && (dietPlan || routinePlan) && (
-            <div className="absolute bottom-0 left-0 right-0 flex h-64 flex-col items-center justify-end bg-gradient-to-t from-background via-background/95 to-transparent pb-8">
-              <Lock className="mb-3 h-8 w-8 text-primary" />
-              <h3 className="mb-2 font-display text-lg font-bold">Desbloquea tu plan completo</h3>
-              <p className="mb-4 text-sm text-muted-foreground">Suscribete por solo AR$ 15.000/mes</p>
-              <Button variant="hero" size="lg" onClick={() => void handleSubscribe()} disabled={billingLoading === "checkout"}>
-                {billingLoading === "checkout" ? "Redirigiendo..." : "Suscribirse ahora"}
+          {!hasPremiumAccess && activePlan && (
+            <div className="glass-card rounded-2xl p-6 text-center">
+              <Lock className="mx-auto mb-3 h-8 w-8 text-primary" />
+              <h3 className="font-display text-lg font-bold">Desbloquea el dashboard completo</h3>
+              <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                Activa la suscripcion mensual para ver todas las secciones del plan, regenerar sin limites y acceder a la experiencia premium completa.
+              </p>
+              <Button className="mt-4" variant="hero" onClick={() => void handleSubscribe()} disabled={checkoutLoading}>
+                {checkoutLoading ? "Redirigiendo..." : "Suscribirme ahora"}
               </Button>
             </div>
           )}
