@@ -276,9 +276,31 @@ export default function Dashboard() {
   const [dailyMealForm, setDailyMealForm] = useState<DailyMealFormState>(initialDailyMealForm);
   const [consultationQuestion, setConsultationQuestion] = useState("");
 
-  const functionHeaders = session?.access_token
-    ? { Authorization: `Bearer ${session.access_token}` }
-    : undefined;
+  const getFunctionHeaders = async () => {
+    const currentSessionResult = await supabase.auth.getSession();
+    let activeSession = currentSessionResult.data.session ?? session;
+
+    if (!activeSession?.access_token) {
+      return null;
+    }
+
+    const expiresSoon = activeSession.expires_at
+      ? (activeSession.expires_at * 1000) <= (Date.now() + 60_000)
+      : false;
+
+    if (expiresSoon) {
+      const refreshedSessionResult = await supabase.auth.refreshSession();
+      if (refreshedSessionResult.error) {
+        console.error("No se pudo refrescar la sesion antes de invocar la edge function", refreshedSessionResult.error);
+      } else {
+        activeSession = refreshedSessionResult.data.session ?? activeSession;
+      }
+    }
+
+    return activeSession?.access_token
+      ? { Authorization: `Bearer ${activeSession.access_token}` }
+      : null;
+  };
 
   const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
   const activePlan = activeTab === "dieta" ? dietPlan : workoutPlan;
@@ -433,7 +455,8 @@ export default function Dashboard() {
 
   const handleGenerate = async (planType: PlanType) => {
     if (!user) return;
-    if (!session?.access_token) {
+    const headers = await getFunctionHeaders();
+    if (!headers) {
       toast({
         title: "Debes iniciar sesion",
         description: "No pudimos validar tu sesion para generar el plan.",
@@ -457,7 +480,7 @@ export default function Dashboard() {
     try {
       const { data: generatedResponse, error: generateError } = await supabase.functions.invoke("generate-plan", {
         body: { planType },
-        headers: functionHeaders,
+        headers,
       });
 
       if (generateError) {
@@ -621,7 +644,8 @@ export default function Dashboard() {
     event.preventDefault();
 
     if (!user || !profile) return;
-    if (!session?.access_token) {
+    const headers = await getFunctionHeaders();
+    if (!headers) {
       toast({
         title: "Debes iniciar sesion",
         description: "No pudimos validar tu sesion para analizar tus comidas.",
@@ -660,7 +684,7 @@ export default function Dashboard() {
           profile,
           targets: dailyTargets,
         },
-        headers: functionHeaders,
+        headers,
       });
 
       if (analysisError) {
@@ -825,7 +849,8 @@ export default function Dashboard() {
     event.preventDefault();
 
     if (!user || !profile) return;
-    if (!session?.access_token) {
+    const headers = await getFunctionHeaders();
+    if (!headers) {
       toast({
         title: "Debes iniciar sesion",
         description: "No pudimos validar tu sesion para consultar al coach.",
@@ -866,7 +891,7 @@ export default function Dashboard() {
           profile,
           contextSummary,
         },
-        headers: functionHeaders,
+        headers,
       });
 
       if (consultationError) {
