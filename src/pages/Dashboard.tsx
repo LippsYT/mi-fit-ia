@@ -13,9 +13,7 @@ import {
   answerNutritionConsultation,
   estimateDailyNutrition,
   GEMINI_MISSING_MESSAGE,
-  generateDietPlan,
   isGeminiConfigured,
-  generateWorkoutPlan,
   normalizePlanForStorage,
   normalizePremiumPlan,
   type DailyMealInput,
@@ -451,17 +449,24 @@ export default function Dashboard() {
       navigate("/formulario");
       return;
     }
-    if (!isGeminiConfigured) {
-      showGeminiMissingToast();
-      return;
-    }
 
     setGenerating(planType);
 
     try {
-      const generated = planType === "dieta"
-        ? await generateDietPlan(profile)
-        : await generateWorkoutPlan(profile);
+      const { data: generatedResponse, error: generateError } = await supabase.functions.invoke("generate-plan", {
+        body: { planType },
+      });
+
+      if (generateError) {
+        console.error("Error invocando generate-plan", generateError, { planType });
+        throw new Error(generateError.message || "No se pudo generar el plan desde el backend");
+      }
+
+      const generated = generatedResponse?.result;
+      if (!generated) {
+        console.error("generate-plan devolvio una respuesta invalida", generatedResponse);
+        throw new Error("La funcion generate-plan no devolvio contenido valido");
+      }
 
       const content = normalizePlanForStorage(generated, planType);
 

@@ -140,20 +140,9 @@ serve(async (req) => {
       throw new Error("Gemini no devolvio texto");
     }
 
-    const plan = JSON.parse(text) as PremiumPlan;
+    const result = JSON.parse(text) as PremiumPlan;
 
-    const { error: insertError } = await supabase.from("generated_plans").insert({
-      user_id: user.id,
-      plan_type: planType,
-      content: plan,
-    });
-
-    if (insertError) {
-      console.error("Error guardando generated_plans desde edge", insertError);
-      throw new Error("Error guardando el plan");
-    }
-
-    return new Response(JSON.stringify({ plan }), {
+    return new Response(JSON.stringify({ result }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
