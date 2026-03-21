@@ -60,17 +60,17 @@ export type NutritionConsultation = {
   answer: string;
 };
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_MODEL = import.meta.env.VITE_GEMINI_MODEL ?? "gemini-2.5-flash";
 
-console.log("Gemini key:", import.meta.env.VITE_GEMINI_API_KEY);
+console.log("frontend gemini loaded?", !!import.meta.env.VITE_GEMINI_API_KEY);
 
 export const isGeminiConfigured = Boolean(import.meta.env.VITE_GEMINI_API_KEY);
 export const GEMINI_MISSING_MESSAGE =
   "Gemini no esta configurado en este deploy. Revisa Vercel, confirma VITE_GEMINI_API_KEY y vuelve a desplegar.";
 
 function ensureGeminiConfig() {
-  if (!GEMINI_API_KEY) {
+  if (!geminiKey) {
     throw new Error(GEMINI_MISSING_MESSAGE);
   }
 }
@@ -363,11 +363,11 @@ async function callGemini<T>(prompt: string): Promise<T> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
     {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-      },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": geminiKey,
+        },
       body: JSON.stringify({
         contents: [
           {

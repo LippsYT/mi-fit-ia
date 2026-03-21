@@ -101,7 +101,8 @@ serve(async (req) => {
       throw new Error("Perfil fitness no encontrado");
     }
 
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("VITE_GEMINI_API_KEY");
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+    console.log("backend gemini loaded?", !!geminiApiKey);
     if (!geminiApiKey) throw new Error("Missing Gemini API key");
 
     const response = await fetch(
