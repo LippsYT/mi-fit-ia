@@ -55,7 +55,7 @@ function HeroSection() {
               satisfaccion
             </div>
             <div>
-              <span className="block font-display text-2xl font-bold text-foreground tabular-nums">AR$ 15.000</span>
+              <span className="block font-display text-2xl font-bold text-foreground tabular-nums">AR$ 11.499</span>
               al mes
             </div>
           </div>
@@ -124,7 +124,7 @@ function PricingSection() {
           <div data-reveal className="glass-card glow-primary rounded-2xl p-8 opacity-0">
             <div className="mb-1 text-sm font-medium text-muted-foreground">Plan Premium</div>
             <div className="mb-6 flex items-baseline justify-center gap-1">
-              <span className="font-display text-5xl font-bold">AR$ 15.000</span>
+              <span className="font-display text-5xl font-bold">AR$ 11.499</span>
               <span className="text-muted-foreground">/mes</span>
             </div>
 
@@ -174,7 +174,7 @@ function CtaSection() {
         </p>
         <div data-reveal className="opacity-0">
           <Link to="/registro">
-            <Button variant="hero" size="xl">Empezar ahora - AR$ 15.000/mes</Button>
+            <Button variant="hero" size="xl">Empezar ahora - AR$ 11.499/mes</Button>
           </Link>
         </div>
       </div>
@@ -191,7 +191,7 @@ export default function Landing() {
       <PricingSection />
       <CtaSection />
       <footer className="border-t border-border/30 py-8 text-center text-sm text-muted-foreground section-padding">
-        © 2026 FIT AI SYSTEM. Todos los derechos reservados.
+        {"\u00A9"} 2026 FIT AI SYSTEM. Todos los derechos reservados.
       </footer>
     </div>
   );

@@ -333,7 +333,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <Crown className="mr-2 h-4 w-4" />
-                    Suscribirme por AR$ 15.000
+                    Suscribirme por AR$ 11.499
                   </>
                 )}
               </Button>
