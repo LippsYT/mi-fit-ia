@@ -150,7 +150,7 @@ const initialDailyMealForm: DailyMealFormState = {
 
 const edgeFunctionsUrl = import.meta.env.VITE_SUPABASE_URL;
 const edgeFunctionsKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 function isActiveSubscription(subscription: SubscriptionRow | null) {
   if (!subscription) return false;
