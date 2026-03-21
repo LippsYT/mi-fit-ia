@@ -21,6 +21,7 @@ import {
 import { startCheckout } from "@/lib/checkout";
 
 type PlanType = "dieta" | "rutina";
+type DashboardTab = PlanType | "ejercicios";
 
 type PlanRow = {
   content: unknown;
@@ -122,11 +123,26 @@ type DailyTargets = {
   steps: number;
 };
 
-type ExerciseSpotlight = {
+type ExerciseIllustration = "squat" | "lunge" | "row" | "bike" | "bench" | "hinge" | "pull" | "carry";
+
+type ExerciseCard = {
   cadence: string;
   focus: string;
+  illustration: ExerciseIllustration;
   name: string;
   reason: string;
+  rest: string;
+  sets: string;
+  steps: string[];
+};
+
+type ExerciseDayPlan = {
+  dayLabel: string;
+  durationMinutes: number;
+  exercises: ExerciseCard[];
+  focus: string;
+  intensity: string;
+  objective: string;
 };
 
 const previewSections = 2;
@@ -159,24 +175,369 @@ const edgeFunctionsUrl = import.meta.env.VITE_SUPABASE_URL;
 const edgeFunctionsKey =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const exerciseSpotlightsByGoal: Record<string, ExerciseSpotlight[]> = {
+const exerciseProgramsByGoal: Record<string, ExerciseDayPlan[]> = {
   bajar_grasa: [
-    { name: "Sentadilla goblet", focus: "Gasto energetico + piernas", reason: "Te obliga a mover mucho musculo y sostener buena tecnica incluso en deficit.", cadence: "2 veces por semana" },
-    { name: "Zancadas caminando", focus: "Piernas + estabilidad", reason: "Suben la exigencia cardiovascular sin perder trabajo de fuerza real.", cadence: "1 a 2 bloques por semana" },
-    { name: "Remo con mancuerna", focus: "Espalda + postura", reason: "Te ayuda a mantener masa muscular mientras bajas grasa.", cadence: "2 sesiones por semana" },
-    { name: "Intervalos en bici o cinta", focus: "Condicionamiento", reason: "Dan un plus de gasto sin destruir la recuperacion de fuerza.", cadence: "1 a 2 cierres semanales" },
+    {
+      dayLabel: "Dia 1",
+      durationMinutes: 32,
+      focus: "Piernas + gasto calorico",
+      intensity: "Media / alta",
+      objective: "Subir pulsaciones mientras cuidas masa muscular",
+      exercises: [
+        {
+          name: "Sentadilla goblet",
+          focus: "Piernas + core",
+          illustration: "squat",
+          cadence: "12 reps controladas",
+          sets: "4 series",
+          rest: "60 segundos",
+          reason: "Mueve mucho musculo y sostiene tecnica incluso en deficit.",
+          steps: [
+            "Sosten la mancuerna pegada al pecho con codos cerrados.",
+            "Baja la cadera hacia atras manteniendo el pecho alto.",
+            "Empuja el piso con todo el pie para volver arriba.",
+          ],
+        },
+        {
+          name: "Zancadas caminando",
+          focus: "Pierna unilateral",
+          illustration: "lunge",
+          cadence: "10 pasos por lado",
+          sets: "3 series",
+          rest: "45 segundos",
+          reason: "Eleva exigencia cardiovascular sin perder trabajo de fuerza real.",
+          steps: [
+            "Da un paso largo y apoya primero el talon.",
+            "Baja ambas rodillas hasta rozar el piso sin colapsar el tronco.",
+            "Empuja con la pierna delantera y cambia de lado de forma fluida.",
+          ],
+        },
+        {
+          name: "Intervalos en bici",
+          focus: "Condicionamiento",
+          illustration: "bike",
+          cadence: "30 s rapido / 30 s suave",
+          sets: "10 rondas",
+          rest: "Sin pausa extra",
+          reason: "Aumenta gasto sin destruir tu recuperacion de fuerza.",
+          steps: [
+            "Arranca con ritmo suave para tomar cadencia.",
+            "Acelera fuerte durante 30 segundos sin perder postura.",
+            "Afloja 30 segundos y repite manteniendo respiracion controlada.",
+          ],
+        },
+      ],
+    },
+    {
+      dayLabel: "Dia 2",
+      durationMinutes: 28,
+      focus: "Espalda + postura activa",
+      intensity: "Media",
+      objective: "Mantener musculo arriba mientras bajas grasa",
+      exercises: [
+        {
+          name: "Remo con mancuerna",
+          focus: "Espalda media",
+          illustration: "row",
+          cadence: "12 reps por brazo",
+          sets: "4 series",
+          rest: "45 segundos",
+          reason: "Ayuda a mantener masa muscular y mejorar postura.",
+          steps: [
+            "Apoya una mano en banco o muslo y crea una espalda larga.",
+            "Lleva el codo hacia la cadera sin girar el torso.",
+            "Baja controlando el peso sin perder tension.",
+          ],
+        },
+        {
+          name: "Farmer walk",
+          focus: "Core + agarre",
+          illustration: "carry",
+          cadence: "40 metros",
+          sets: "4 pasadas",
+          rest: "40 segundos",
+          reason: "Da trabajo util y eleva el gasto con poco impacto.",
+          steps: [
+            "Sujeta las cargas a los lados con hombros abajo.",
+            "Camina corto y firme manteniendo abdomen duro.",
+            "No balancees el cuerpo ni dejes caer el pecho.",
+          ],
+        },
+        {
+          name: "Sentadilla goblet ligera",
+          focus: "Acabado metabolico",
+          illustration: "squat",
+          cadence: "15 reps",
+          sets: "2 series",
+          rest: "30 segundos",
+          reason: "Cierra la sesion con mas trabajo sin complicar tecnica.",
+          steps: [
+            "Respira antes de bajar y mantente estable.",
+            "Busca profundidad comoda sin despegar talones.",
+            "Sube con ritmo continuo, sin rebotes.",
+          ],
+        },
+      ],
+    },
   ],
   ganar_musculo: [
-    { name: "Sentadilla trasera", focus: "Base de masa muscular", reason: "Es uno de los ejercicios que mas retorno te da para construir piernas y gluteos.", cadence: "2 veces por semana" },
-    { name: "Press banca", focus: "Pecho + triceps", reason: "Te permite progresar con cargas y medir avance mes a mes.", cadence: "1 a 2 sesiones por semana" },
-    { name: "Peso muerto rumano", focus: "Femoral + gluteo", reason: "Suma masa atras de la pierna y mejora la calidad del patron de bisagra.", cadence: "1 a 2 sesiones por semana" },
-    { name: "Remo con barra", focus: "Espalda densa", reason: "Compensa el trabajo de empuje y mejora la apariencia global del torso.", cadence: "2 sesiones por semana" },
+    {
+      dayLabel: "Dia 1",
+      durationMinutes: 42,
+      focus: "Piernas pesadas",
+      intensity: "Alta",
+      objective: "Crear base de masa muscular real en tren inferior",
+      exercises: [
+        {
+          name: "Sentadilla trasera",
+          focus: "Base de masa muscular",
+          illustration: "squat",
+          cadence: "6 a 8 reps",
+          sets: "4 series",
+          rest: "90 segundos",
+          reason: "Es de los ejercicios con mas retorno para piernas y gluteos.",
+          steps: [
+            "Apoya la barra firme sobre la parte alta de la espalda.",
+            "Rompe con cadera y rodillas al mismo tiempo manteniendo pecho alto.",
+            "Sube empujando con todo el pie y rodillas alineadas.",
+          ],
+        },
+        {
+          name: "Peso muerto rumano",
+          focus: "Femoral + gluteo",
+          illustration: "hinge",
+          cadence: "8 a 10 reps",
+          sets: "4 series",
+          rest: "75 segundos",
+          reason: "Suma masa atras de la pierna y mejora la bisagra.",
+          steps: [
+            "Empieza de pie con la barra pegada al cuerpo.",
+            "Lleva la cadera hacia atras con rodillas apenas flexionadas.",
+            "Sube apretando gluteos sin arquear la espalda.",
+          ],
+        },
+        {
+          name: "Zancadas caminando",
+          focus: "Volumen extra",
+          illustration: "lunge",
+          cadence: "12 pasos por lado",
+          sets: "3 series",
+          rest: "60 segundos",
+          reason: "Aporta mas estimulo sin repetir el mismo patron pesado.",
+          steps: [
+            "Da pasos amplios para cargar gluteos y cuadriceps.",
+            "Mantente erguido mientras bajas con control.",
+            "Empuja el piso fuerte para salir de cada paso.",
+          ],
+        },
+      ],
+    },
+    {
+      dayLabel: "Dia 2",
+      durationMinutes: 38,
+      focus: "Empuje de torso",
+      intensity: "Media / alta",
+      objective: "Subir fuerza y volumen en pecho y triceps",
+      exercises: [
+        {
+          name: "Press banca",
+          focus: "Pecho + triceps",
+          illustration: "bench",
+          cadence: "6 a 8 reps",
+          sets: "4 series",
+          rest: "90 segundos",
+          reason: "Permite progresar cargas y medir avance mes a mes.",
+          steps: [
+            "Acomoda escapulas atras y pies firmes en el suelo.",
+            "Baja la barra al pecho con antebrazos verticales.",
+            "Empuja en linea recta sin despegar gluteos del banco.",
+          ],
+        },
+        {
+          name: "Press inclinado",
+          focus: "Pecho superior",
+          illustration: "bench",
+          cadence: "8 a 10 reps",
+          sets: "3 series",
+          rest: "75 segundos",
+          reason: "Completa el trabajo de empuje con mejor angulo para torso alto.",
+          steps: [
+            "Ajusta el banco con inclinacion moderada.",
+            "Baja con control hasta linea del pecho alto.",
+            "Sube cerrando fuerte el pecho sin rebotar.",
+          ],
+        },
+        {
+          name: "Farmer walk",
+          focus: "Estabilidad total",
+          illustration: "carry",
+          cadence: "30 metros",
+          sets: "3 pasadas",
+          rest: "45 segundos",
+          reason: "Suma trabajo de agarre y core para sostener mejores cargas.",
+          steps: [
+            "Toma las mancuernas con hombros atras.",
+            "Camina firme y corto sin inclinarte.",
+            "Mantente alto hasta el final de la pasada.",
+          ],
+        },
+      ],
+    },
+    {
+      dayLabel: "Dia 3",
+      durationMinutes: 40,
+      focus: "Espalda densa",
+      intensity: "Media / alta",
+      objective: "Dar espesor al torso y equilibrar el empuje",
+      exercises: [
+        {
+          name: "Remo con barra",
+          focus: "Espalda densa",
+          illustration: "row",
+          cadence: "8 a 10 reps",
+          sets: "4 series",
+          rest: "75 segundos",
+          reason: "Compensa empuje y mejora la apariencia global del torso.",
+          steps: [
+            "Inclina el tronco con espalda neutra y barra cerca del cuerpo.",
+            "Lleva los codos atras sin encoger hombros.",
+            "Desciende controlado manteniendo abdomen firme.",
+          ],
+        },
+        {
+          name: "Dominadas asistidas",
+          focus: "Espalda funcional",
+          illustration: "pull",
+          cadence: "6 a 8 reps",
+          sets: "4 series",
+          rest: "75 segundos",
+          reason: "Construye espalda y mejora control corporal.",
+          steps: [
+            "Agarra la barra con manos apenas mas abiertas que hombros.",
+            "Tira llevando el pecho hacia arriba antes que la barbilla.",
+            "Baja lento hasta estirar sin perder tension.",
+          ],
+        },
+        {
+          name: "Peso muerto rumano ligero",
+          focus: "Recordatorio de bisagra",
+          illustration: "hinge",
+          cadence: "12 reps",
+          sets: "2 series",
+          rest: "45 segundos",
+          reason: "Refuerza la cadena posterior sin agotar demasiado.",
+          steps: [
+            "Mantente largo desde cabeza a cadera.",
+            "Lleva la barra rozando muslos y espinillas.",
+            "Sube apretando gluteos con control.",
+          ],
+        },
+      ],
+    },
   ],
   mantener: [
-    { name: "Sentadilla frontal", focus: "Piernas + core", reason: "Mantiene fuerza y tecnica con menos desgaste total.", cadence: "1 o 2 veces por semana" },
-    { name: "Press inclinado", focus: "Torso superior", reason: "Te deja sostener musculatura y calidad de empuje sin sobrecargar demasiado.", cadence: "1 a 2 sesiones por semana" },
-    { name: "Dominadas asistidas o jalon", focus: "Espalda funcional", reason: "Mantiene la espalda activa y estable con volumen controlado.", cadence: "2 sesiones por semana" },
-    { name: "Farmer walk o carries", focus: "Core + agarre", reason: "Aporta condicion fisica util y sensacion atletica real.", cadence: "Como final de sesion" },
+    {
+      dayLabel: "Dia 1",
+      durationMinutes: 30,
+      focus: "Torso + estabilidad",
+      intensity: "Media",
+      objective: "Mantener fuerza util sin exceso de fatiga",
+      exercises: [
+        {
+          name: "Press inclinado",
+          focus: "Torso superior",
+          illustration: "bench",
+          cadence: "8 a 10 reps",
+          sets: "3 series",
+          rest: "60 segundos",
+          reason: "Mantiene musculatura y calidad de empuje con carga moderada.",
+          steps: [
+            "Escapulas atras y pies firmes antes de empezar.",
+            "Baja parejo hasta el pecho alto.",
+            "Empuja sin perder control del banco.",
+          ],
+        },
+        {
+          name: "Dominadas asistidas",
+          focus: "Espalda funcional",
+          illustration: "pull",
+          cadence: "8 reps",
+          sets: "3 series",
+          rest: "60 segundos",
+          reason: "Mantiene la espalda activa y estable con volumen controlado.",
+          steps: [
+            "Inicia con abdomen firme y hombros abajo.",
+            "Tira con codos hacia costillas.",
+            "Desciende lento para aprovechar cada repeticion.",
+          ],
+        },
+        {
+          name: "Farmer walk",
+          focus: "Core + agarre",
+          illustration: "carry",
+          cadence: "35 metros",
+          sets: "3 pasadas",
+          rest: "40 segundos",
+          reason: "Da condicion fisica util y sensacion atletica real.",
+          steps: [
+            "Carga fuerte pero con postura alta.",
+            "Camina sin balancearte ni acelerar de mas.",
+            "Respira corto y manten abdomen activo.",
+          ],
+        },
+      ],
+    },
+    {
+      dayLabel: "Dia 2",
+      durationMinutes: 28,
+      focus: "Piernas tecnicas",
+      intensity: "Media",
+      objective: "Sostener calidad de movimiento y fuerza base",
+      exercises: [
+        {
+          name: "Sentadilla frontal",
+          focus: "Piernas + core",
+          illustration: "squat",
+          cadence: "6 a 8 reps",
+          sets: "3 series",
+          rest: "75 segundos",
+          reason: "Mantiene fuerza y tecnica con menos desgaste total.",
+          steps: [
+            "Mantene codos altos y torso largo.",
+            "Baja con control sin colapsar el pecho.",
+            "Sube apretando abdomen y empujando con todo el pie.",
+          ],
+        },
+        {
+          name: "Remo con mancuerna",
+          focus: "Postura",
+          illustration: "row",
+          cadence: "10 reps por brazo",
+          sets: "3 series",
+          rest: "45 segundos",
+          reason: "Compensa el dia y mantiene la espalda activa.",
+          steps: [
+            "Busca una base firme y espalda neutra.",
+            "Tira con el codo hacia atras.",
+            "Baja lento para sentir bien el dorsal.",
+          ],
+        },
+        {
+          name: "Zancadas caminando",
+          focus: "Estabilidad",
+          illustration: "lunge",
+          cadence: "10 pasos por lado",
+          sets: "2 series",
+          rest: "45 segundos",
+          reason: "Mantiene coordinacion y trabajo unilateral sin exceso.",
+          steps: [
+            "Da un paso largo y cae controlado.",
+            "Alinea rodilla y punta del pie.",
+            "Sube estable y sigue caminando.",
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -295,12 +656,113 @@ function goalLabel(goal: string | null | undefined) {
   }
 }
 
-function getExerciseSpotlights(goal: string | null | undefined) {
+function getExerciseProgram(goal: string | null | undefined) {
   if (!goal) {
-    return exerciseSpotlightsByGoal.mantener;
+    return exerciseProgramsByGoal.mantener;
   }
 
-  return exerciseSpotlightsByGoal[goal] ?? exerciseSpotlightsByGoal.mantener;
+  return exerciseProgramsByGoal[goal] ?? exerciseProgramsByGoal.mantener;
+}
+
+function formatTimer(seconds: number | null) {
+  if (seconds == null) return "--:--";
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+function ExerciseDemo({ label, variant }: { label: string; variant: ExerciseIllustration }) {
+  const baseProps = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 4,
+  };
+
+  switch (variant) {
+    case "bench":
+      return (
+        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
+          <title>{label}</title>
+          <path {...baseProps} d="M32 96h116M52 96V72h54v24M106 72l22-18M128 54l16 6" />
+          <circle {...baseProps} cx="64" cy="50" r="10" />
+          <path {...baseProps} d="M74 56h24m-12 0v18m-26 34 8-18 18-16m0 0 18 16 6 18" />
+          <path {...baseProps} d="M94 44h38m-8-10 8 10-8 10" opacity="0.7" />
+        </svg>
+      );
+    case "hinge":
+      return (
+        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
+          <title>{label}</title>
+          <circle {...baseProps} cx="74" cy="34" r="10" />
+          <path {...baseProps} d="M74 44v30l-18 18m18-18 28 8m-28-8 24-16m-18 54 18-28 14 26" />
+          <path {...baseProps} d="M54 104h72" opacity="0.4" />
+          <path {...baseProps} d="M120 30c12 14 12 36 0 50" opacity="0.7" />
+        </svg>
+      );
+    case "pull":
+      return (
+        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
+          <title>{label}</title>
+          <path {...baseProps} d="M48 18h84" />
+          <circle {...baseProps} cx="90" cy="46" r="10" />
+          <path {...baseProps} d="M70 18v22m40-22v22M78 56v28m24-28v28M90 56v22m0 0-18 18m18-18 18 18m-18 0-12 24m12-24 12 24" />
+          <path {...baseProps} d="M128 54c-8 8-18 12-28 12" opacity="0.7" />
+        </svg>
+      );
+    case "carry":
+      return (
+        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
+          <title>{label}</title>
+          <circle {...baseProps} cx="90" cy="28" r="10" />
+          <path {...baseProps} d="M90 38v34m0 0-20 16m20-16 20 16m-30-24H56m48 0h20M56 64v34m68-34v34M44 98h24m56 0h24" />
+          <path {...baseProps} d="M46 26h-14m0 0 8-8m-8 8 8 8M134 26h14m0 0-8-8m8 8-8 8" opacity="0.7" />
+        </svg>
+      );
+    case "row":
+      return (
+        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
+          <title>{label}</title>
+          <circle {...baseProps} cx="66" cy="34" r="10" />
+          <path {...baseProps} d="M66 44l18 18 28 6m-28-6-16 20m16-20-28 8m28 12 16 24m-44-18 12 18" />
+          <path {...baseProps} d="M116 68h26m-8-8 8 8-8 8" opacity="0.7" />
+          <path {...baseProps} d="M46 112h88" opacity="0.4" />
+        </svg>
+      );
+    case "bike":
+      return (
+        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
+          <title>{label}</title>
+          <circle {...baseProps} cx="58" cy="96" r="18" />
+          <circle {...baseProps} cx="122" cy="96" r="18" />
+          <path {...baseProps} d="M58 96l26-28 20 28H58m26-28h24m-12 0-10-18m26 18 12-10" />
+          <path {...baseProps} d="M96 38h16m-8 0v24m0 0-22 10" />
+          <path {...baseProps} d="M146 38c8 12 8 28 0 40" opacity="0.7" />
+        </svg>
+      );
+    case "lunge":
+      return (
+        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
+          <title>{label}</title>
+          <circle {...baseProps} cx="72" cy="26" r="10" />
+          <path {...baseProps} d="M72 36v28l22 16m-22-16-18 24m18-24-20 8m42 8 26 6m-16 0-6 26m-24 0 10-26" />
+          <path {...baseProps} d="M40 112h100" opacity="0.4" />
+          <path {...baseProps} d="M134 54v28m0 0-8-8m8 8 8-8" opacity="0.7" />
+        </svg>
+      );
+    case "squat":
+    default:
+      return (
+        <svg viewBox="0 0 180 140" aria-label={label} className="h-36 w-full text-primary">
+          <title>{label}</title>
+          <circle {...baseProps} cx="72" cy="26" r="10" />
+          <path {...baseProps} d="M72 36v26m0 0-18 18m18-18 22 18m-22-18-22-8m22 8 18-8m-36 54 18-36m18 0 18 36" />
+          <path {...baseProps} d="M42 116h96" opacity="0.4" />
+          <path {...baseProps} d="M128 40v34m0 0-8-8m8 8 8-8" opacity="0.7" />
+        </svg>
+      );
+  }
 }
 
 export default function Dashboard() {
@@ -314,7 +776,7 @@ export default function Dashboard() {
   const [progressCheckins, setProgressCheckins] = useState<ProgressCheckin[]>([]);
   const [consultations, setConsultations] = useState<AiConsultationRow[]>([]);
   const [workoutProgress, setWorkoutProgress] = useState<WorkoutProgressRow[]>([]);
-  const [activeTab, setActiveTab] = useState<PlanType>("dieta");
+  const [activeTab, setActiveTab] = useState<DashboardTab>("dieta");
   const [loadingData, setLoadingData] = useState(true);
   const [generating, setGenerating] = useState<PlanType | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -326,6 +788,9 @@ export default function Dashboard() {
   const [checkinForm, setCheckinForm] = useState<CheckinFormState>(initialCheckinForm);
   const [dailyMealForm, setDailyMealForm] = useState<DailyMealFormState>(initialDailyMealForm);
   const [consultationQuestion, setConsultationQuestion] = useState("");
+  const [selectedExerciseDay, setSelectedExerciseDay] = useState(0);
+  const [exerciseTimerRunning, setExerciseTimerRunning] = useState(false);
+  const [exerciseSecondsLeft, setExerciseSecondsLeft] = useState<number | null>(null);
 
   const getFunctionAccessToken = async () => {
     const currentSessionResult = await supabase.auth.getSession();
@@ -399,9 +864,9 @@ export default function Dashboard() {
   };
 
   const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
-  const activePlan = activeTab === "dieta" ? dietPlan : workoutPlan;
+  const activePlan = activeTab === "dieta" ? dietPlan : activeTab === "rutina" ? workoutPlan : null;
   const dailyTargets = useMemo(() => estimateDailyTargets(profile), [profile]);
-  const exerciseSpotlights = useMemo(() => getExerciseSpotlights(profile?.goal), [profile?.goal]);
+  const exerciseProgram = useMemo(() => getExerciseProgram(profile?.goal), [profile?.goal]);
   const todayNutrition = useMemo(() => {
     const todayLogs = nutritionLogs.filter((log) => isToday(log.eaten_at));
 
@@ -431,12 +896,51 @@ export default function Dashboard() {
         .map((item) => [item.workout_day, item]),
     );
   }, [workoutPlan?.id, workoutProgress]);
+  const activeExerciseDay = exerciseProgram[selectedExerciseDay] ?? exerciseProgram[0] ?? null;
   const monthlyValueHooks = useMemo(() => [
     `Reajuste mensual para ${goalLabel(profile?.goal)} segun progreso real`,
     "Rotacion de ejercicios para evitar estancarte y mantener motivacion",
     dailyTargets ? `Objetivos diarios recalculados alrededor de ${formatNumber(dailyTargets.calories)} kcal` : "Objetivos diarios recalculados segun tu etapa actual",
     "Seguimiento nutricional, consultas y check-ins que justifican la renovacion",
   ], [dailyTargets, profile?.goal]);
+
+  useEffect(() => {
+    setSelectedExerciseDay(0);
+  }, [profile?.goal]);
+
+  useEffect(() => {
+    if (!activeExerciseDay) {
+      setExerciseTimerRunning(false);
+      setExerciseSecondsLeft(null);
+      return;
+    }
+
+    setExerciseTimerRunning(false);
+    setExerciseSecondsLeft(activeExerciseDay.durationMinutes * 60);
+  }, [activeExerciseDay]);
+
+  useEffect(() => {
+    if (activeTab !== "ejercicios") {
+      setExerciseTimerRunning(false);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!exerciseTimerRunning || exerciseSecondsLeft == null) return;
+    if (exerciseSecondsLeft <= 0) {
+      setExerciseTimerRunning(false);
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setExerciseSecondsLeft((current) => {
+        if (current == null) return current;
+        return Math.max(current - 1, 0);
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [exerciseSecondsLeft, exerciseTimerRunning]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -1078,6 +1582,28 @@ export default function Dashboard() {
     }
   };
 
+  const handleToggleExerciseTimer = () => {
+    if (!activeExerciseDay) return;
+
+    if (exerciseTimerRunning) {
+      setExerciseTimerRunning(false);
+      return;
+    }
+
+    setExerciseSecondsLeft((current) => (
+      current == null || current <= 0
+        ? activeExerciseDay.durationMinutes * 60
+        : current
+    ));
+    setExerciseTimerRunning(true);
+  };
+
+  const handleResetExerciseTimer = () => {
+    if (!activeExerciseDay) return;
+    setExerciseTimerRunning(false);
+    setExerciseSecondsLeft(activeExerciseDay.durationMinutes * 60);
+  };
+
   if (authLoading || loadingData) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -1230,115 +1756,229 @@ export default function Dashboard() {
             <Calendar className="mr-1 h-4 w-4" />
             Rutina semanal
           </Button>
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
-            <Bot className="h-3.5 w-3.5" />
+          <Button
+            variant={activeTab === "ejercicios" ? "default" : "secondary"}
+            onClick={() => setActiveTab("ejercicios")}
+            size="sm"
+            disabled={!hasPremiumAccess}
+          >
+            <Bot className="mr-1 h-4 w-4" />
             Ejercicios IA premium
-          </div>
+          </Button>
         </div>
 
-        {hasPremiumAccess && (
-          <div className="mb-8 grid gap-6 xl:grid-cols-[1.35fr,1fr]">
-            <div className="glass-card rounded-2xl p-6">
-              <div className="flex items-start gap-3">
-                <div className="rounded-xl bg-primary/10 p-2">
-                  <Target className="h-5 w-5 text-primary" />
+        {hasPremiumAccess && activeTab === "ejercicios" && activeExerciseDay && (
+          <div className="mb-8 grid gap-6 xl:grid-cols-[290px,1fr]">
+            <div className="space-y-6">
+              <div className="glass-card rounded-2xl p-6">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-primary/10 p-2">
+                    <Calendar className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="font-display text-xl font-bold">Tu semana de ejercicios IA</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Recomendado para {goalLabel(profile?.goal)} con dias listos para ejecutar.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="font-display text-xl font-bold">Ejercicios recomendados por tu coach IA</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Priorizados para {goalLabel(profile?.goal)} y para que sientas avance real en cada mes premium.
-                  </p>
+
+                <div className="mt-5 space-y-3">
+                  {exerciseProgram.map((day, index) => (
+                    <button
+                      key={day.dayLabel}
+                      type="button"
+                      onClick={() => setSelectedExerciseDay(index)}
+                      className={`w-full rounded-xl border p-4 text-left transition ${selectedExerciseDay === index ? "border-primary/40 bg-primary/10 shadow-[0_0_0_1px_rgba(163,230,53,0.18)]" : "border-border/60 bg-background/20 hover:border-primary/20 hover:bg-background/30"}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-display text-base font-semibold">{day.dayLabel}</span>
+                        <span className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                          {day.durationMinutes} min
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm font-medium text-foreground/90">{day.focus}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{day.objective}</p>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                {exerciseSpotlights.map((exercise) => (
-                  <div key={exercise.name} className="rounded-xl border border-border/60 bg-background/20 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-display text-lg font-semibold">{exercise.name}</h3>
-                      <span className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+              <div className="glass-card rounded-2xl p-6">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-primary/10 p-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="font-display text-xl font-bold">Por que este premium se siente real</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Cada mes cambia contigo, no se queda congelado.
+                    </p>
+                  </div>
+                </div>
+
+                <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
+                  {monthlyValueHooks.map((item) => (
+                    <li key={item} className="flex gap-3 rounded-xl border border-border/60 bg-background/20 p-4">
+                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="glass-card rounded-2xl p-6">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-2xl">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                        {activeExerciseDay.dayLabel}
+                      </span>
+                      <span className="rounded-full border border-border/60 bg-background/30 px-3 py-1 text-xs font-semibold text-muted-foreground">
+                        {activeExerciseDay.intensity}
+                      </span>
+                    </div>
+                    <h2 className="mt-4 font-display text-2xl font-bold">{activeExerciseDay.focus}</h2>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      {activeExerciseDay.objective}. Tu coach IA te deja el bloque listo para empezar ahora.
+                    </p>
+
+                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl border border-border/60 bg-background/20 p-4">
+                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Duracion</div>
+                        <div className="mt-2 text-lg font-bold">{activeExerciseDay.durationMinutes} min</div>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-background/20 p-4">
+                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Ejercicios</div>
+                        <div className="mt-2 text-lg font-bold">{activeExerciseDay.exercises.length}</div>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-background/20 p-4">
+                        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Meta</div>
+                        <div className="mt-2 text-lg font-bold">{activeExerciseDay.intensity}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="min-w-[260px] rounded-2xl border border-primary/20 bg-primary/5 p-5">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Temporizador</div>
+                    <div className="mt-3 font-display text-5xl font-bold">{formatTimer(exerciseSecondsLeft)}</div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Tiempo objetivo para completar este bloque premium.
+                    </p>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <Button variant="hero" onClick={handleToggleExerciseTimer}>
+                        {exerciseTimerRunning ? "Pausar" : "Iniciar entrenamiento"}
+                      </Button>
+                      <Button variant="outline" onClick={handleResetExerciseTimer}>
+                        Reiniciar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                {activeExerciseDay.exercises.map((exercise) => (
+                  <div key={`${activeExerciseDay.dayLabel}-${exercise.name}`} className="glass-card rounded-2xl p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-display text-xl font-bold">{exercise.name}</h3>
+                        <p className="mt-1 text-sm font-medium text-foreground/90">{exercise.focus}</p>
+                      </div>
+                      <span className="rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                         {exercise.cadence}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm font-medium text-foreground/90">{exercise.focus}</p>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{exercise.reason}</p>
+
+                    <div className="mt-4 rounded-2xl border border-border/60 bg-background/20 p-4">
+                      <ExerciseDemo label={exercise.name} variant={exercise.illustration} />
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl border border-border/60 bg-background/20 p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Series</div>
+                        <div className="mt-1 font-semibold">{exercise.sets}</div>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-background/20 p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Cadencia</div>
+                        <div className="mt-1 font-semibold">{exercise.cadence}</div>
+                      </div>
+                      <div className="rounded-xl border border-border/60 bg-background/20 p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Descanso</div>
+                        <div className="mt-1 font-semibold">{exercise.rest}</div>
+                      </div>
+                    </div>
+
+                    <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{exercise.reason}</p>
+
+                    <div className="mt-4 rounded-xl border border-border/60 bg-background/20 p-4">
+                      <div className="text-sm font-semibold text-foreground">Movimientos que debes hacer</div>
+                      <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                        {exercise.steps.map((step) => (
+                          <li key={step} className="flex gap-2">
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-
-            <div className="glass-card rounded-2xl p-6">
-              <div className="flex items-start gap-3">
-                <div className="rounded-xl bg-primary/10 p-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h2 className="font-display text-xl font-bold">Lo que hace valioso cada mes premium</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    La renovacion se justifica cuando el plan se sigue moviendo contigo.
-                  </p>
-                </div>
-              </div>
-
-              <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
-                {monthlyValueHooks.map((item) => (
-                  <li key={item} className="flex gap-3 rounded-xl border border-border/60 bg-background/20 p-4">
-                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
           </div>
         )}
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-display text-xl font-bold">
-                {activeTab === "dieta" ? "Tu dieta personalizada" : "Tu rutina personalizada"}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {activePlan?.updated_at
-                  ? `Ultima actualizacion: ${new Date(activePlan.updated_at).toLocaleString("es-AR")}`
-                  : "Todavia no generaste este plan."}
-              </p>
+        {activeTab !== "ejercicios" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-xl font-bold">
+                  {activeTab === "dieta" ? "Tu dieta personalizada" : "Tu rutina personalizada"}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {activePlan?.updated_at
+                    ? `Ultima actualizacion: ${new Date(activePlan.updated_at).toLocaleString("es-AR")}`
+                    : "Todavia no generaste este plan."}
+                </p>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleGenerate(activeTab)}
+                disabled={Boolean(generating) || !profile}
+              >
+                {generating === activeTab ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    {activePlan ? "Regenerar" : "Generar"}
+                  </>
+                )}
+              </Button>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void handleGenerate(activeTab)}
-              disabled={Boolean(generating) || !profile}
-            >
-              {generating === activeTab ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generando...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  {activePlan ? "Regenerar" : "Generar"}
-                </>
-              )}
-            </Button>
-          </div>
+            {!activePlan && (
+              <div className="glass-card rounded-xl p-8 text-center">
+                <Sparkles className="mx-auto mb-3 h-10 w-10 text-primary" />
+                <p className="text-sm text-muted-foreground">
+                  Genera tu primer plan con Gemini para ver una vista previa premium.
+                </p>
+              </div>
+            )}
 
-          {!activePlan && (
-            <div className="glass-card rounded-xl p-8 text-center">
-              <Sparkles className="mx-auto mb-3 h-10 w-10 text-primary" />
-              <p className="text-sm text-muted-foreground">
-                Genera tu primer plan con Gemini para ver una vista previa premium.
-              </p>
-            </div>
-          )}
-
-          {activePlan && (
-            <div className="glass-card rounded-2xl p-6">
-              <h3 className="font-display text-2xl font-bold">{activePlan.content.title}</h3>
-              <p className="mt-1 text-sm text-primary">{activePlan.content.subtitle}</p>
-              <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{activePlan.content.intro}</p>
+            {activePlan && (
+              <div className="glass-card rounded-2xl p-6">
+                <h3 className="font-display text-2xl font-bold">{activePlan.content.title}</h3>
+                <p className="mt-1 text-sm text-primary">{activePlan.content.subtitle}</p>
+                <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{activePlan.content.intro}</p>
 
               {Boolean(activePlan.content.highlights?.length) && (
                 <div className="mt-5 flex flex-wrap gap-2">
@@ -1714,7 +2354,8 @@ export default function Dashboard() {
               </Button>
             </div>
           )}
-        </div>
+          </div>
+        )}
       </main>
     </div>
   );
