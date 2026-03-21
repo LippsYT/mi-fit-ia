@@ -11,6 +11,19 @@ type CheckoutBody = {
   userId?: string;
 };
 
+function getStripeMode(secretKey: string | undefined) {
+  if (!secretKey) return "missing";
+  if (secretKey.startsWith("sk_live_")) return "live";
+  if (secretKey.startsWith("sk_test_")) return "test";
+  return "unknown";
+}
+
+function maskValue(value: string | undefined, visible = 6) {
+  if (!value) return "missing";
+  if (value.length <= visible * 2) return value;
+  return `${value.slice(0, visible)}...${value.slice(-visible)}`;
+}
+
 function sendJson(res: any, status: number, payload: JsonResponse) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -76,9 +89,19 @@ export default async function handler(req: any, res: any) {
 
   try {
     const priceId = process.env.STRIPE_PRICE_ID;
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    const stripeMode = getStripeMode(stripeSecretKey);
+
+    console.log("create-checkout-session request received", {
+      hasStripeSecretKey: Boolean(stripeSecretKey),
+      priceId,
+      priceIdMasked: maskValue(priceId),
+      stripeMode,
+    });
+
     if (!priceId) {
       console.error("Missing STRIPE_PRICE_ID in Vercel environment", {
-        STRIPE_SECRET_KEY: Boolean(process.env.STRIPE_SECRET_KEY),
+        STRIPE_SECRET_KEY: Boolean(stripeSecretKey),
         STRIPE_PRICE_ID: Boolean(process.env.STRIPE_PRICE_ID),
         SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
         VITE_SUPABASE_URL: Boolean(process.env.VITE_SUPABASE_URL),
@@ -113,6 +136,12 @@ export default async function handler(req: any, res: any) {
     const supabaseAdmin = getSupabaseAdmin();
     const stripe = getStripeClient();
 
+    console.log("create-checkout-session authenticated user", {
+      email,
+      stripeMode,
+      userId,
+    });
+
     const { data: existingSubscription, error: existingSubscriptionError } = await supabaseAdmin
       .from("subscriptions")
       .select("stripe_customer_id")
@@ -137,8 +166,13 @@ export default async function handler(req: any, res: any) {
         customerId = customer.id;
       } catch (error: any) {
         console.error("Stripe customer creation failed", {
+          code: error?.code,
           error,
           email,
+          message: error?.message,
+          requestId: error?.requestId,
+          statusCode: error?.statusCode,
+          type: error?.type,
           userId,
         });
         return sendJson(res, 500, { error: error?.message ?? "Stripe customer creation failed" });
@@ -162,6 +196,14 @@ export default async function handler(req: any, res: any) {
     }
 
     const origin = getRequestOrigin(req);
+    console.log("Creating Stripe checkout session", {
+      customerId,
+      origin,
+      priceId,
+      priceIdMasked: maskValue(priceId),
+      stripeMode,
+      userId,
+    });
 
     try {
       const checkoutSession = await stripe.checkout.sessions.create({
@@ -194,9 +236,16 @@ export default async function handler(req: any, res: any) {
       return sendJson(res, 200, { url: checkoutSession.url });
     } catch (error: any) {
       console.error("Stripe checkout session creation failed", {
+        code: error?.code,
         error,
         origin,
         priceId,
+        priceIdMasked: maskValue(priceId),
+        message: error?.message,
+        requestId: error?.requestId,
+        statusCode: error?.statusCode,
+        stripeMode,
+        type: error?.type,
         userId,
       });
       return sendJson(res, 500, { error: error?.message ?? "Stripe checkout session failed" });
