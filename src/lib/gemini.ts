@@ -16,6 +16,8 @@ export type PremiumPlanSection = {
 
 export type PremiumPlan = {
   closing: string;
+  coach_notes?: string[];
+  highlights?: string[];
   intro: string;
   sections: PremiumPlanSection[];
   subtitle: string;
@@ -33,7 +35,14 @@ function ensureGeminiConfig() {
 
 function cleanText(value: unknown) {
   if (typeof value !== "string") return "";
-  return value.trim();
+  return value
+    .replace(/\*\*/g, "")
+    .replace(/[`#_]/g, "")
+    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
+    .replace(/\(\s*\)/g, "")
+    .replace(/^[\-\u2022*\s]+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function normalizeBullets(value: unknown) {
@@ -79,11 +88,13 @@ export function normalizePremiumPlan(content: unknown, planType: "dieta" | "ruti
     const bullets = splitTextIntoBullets(content);
     if (!bullets.length) return null;
 
-    return {
-      closing: "Puedes regenerar este plan para obtener una version mas detallada.",
-      intro: bullets[0] ?? "Resumen premium generado para tu objetivo actual.",
-      sections: [
-        {
+      return {
+        closing: "Puedes regenerar este plan para obtener una version mas detallada.",
+        coach_notes: [],
+        highlights: [],
+        intro: bullets[0] ?? "Resumen premium generado para tu objetivo actual.",
+        sections: [
+          {
           title: planType === "dieta" ? "Resumen de tu plan" : "Resumen de tu rutina",
           bullets,
         },
@@ -119,6 +130,8 @@ export function normalizePremiumPlan(content: unknown, planType: "dieta" | "ruti
     if (sections.length) {
       return {
         closing: cleanText(record.closing) || "Sigue este plan con constancia y ajustalo segun tu progreso.",
+        coach_notes: normalizeBullets(record.coach_notes),
+        highlights: normalizeBullets(record.highlights),
         intro: cleanText(record.intro) || "Plan premium generado segun tu perfil actual.",
         sections,
         subtitle: cleanText(record.subtitle) || defaultSubtitle(planType),
@@ -147,6 +160,8 @@ export function normalizePremiumPlan(content: unknown, planType: "dieta" | "ruti
     if (sections.length) {
       return {
         closing: `Macros estimados: Proteinas ${String((record.macros as any)?.proteinas ?? "-")}, Carbohidratos ${String((record.macros as any)?.carbohidratos ?? "-")}, Grasas ${String((record.macros as any)?.grasas ?? "-")}.`,
+        coach_notes: [],
+        highlights: [],
         intro: "Migramos tu plan anterior al formato premium actual.",
         sections,
         subtitle: cleanText(record.totalCal ? `Total diario estimado: ${String(record.totalCal)}` : "") || defaultSubtitle(planType),
@@ -175,6 +190,8 @@ export function normalizePremiumPlan(content: unknown, planType: "dieta" | "ruti
     if (sections.length) {
       return {
         closing: "Prioriza tecnica, progresion y recuperacion para sostener resultados.",
+        coach_notes: [],
+        highlights: [],
         intro: "Migramos tu rutina anterior al formato premium actual.",
         sections,
         subtitle: defaultSubtitle(planType),
@@ -226,12 +243,14 @@ Responde SOLO con JSON valido con esta estructura:
   "title": "string",
   "subtitle": "string",
   "intro": "string",
+  "highlights": ["string", "string", "string"],
   "sections": [
     {
       "title": "string",
-      "bullets": ["string", "string", "string"]
+      "bullets": ["string", "string", "string", "string"]
     }
   ],
+  "coach_notes": ["string", "string", "string"],
   "closing": "string"
 }
 
@@ -241,8 +260,15 @@ Incluye secciones concretas sobre:
 - ejemplo de menu diario
 - lista de alimentos recomendados
 - consejos de adherencia y hidratacion
+- errores comunes que evitar
+- mini plan de accion para hoy
 
-Haz que el resultado se vea premium y personalizado.`;
+Importante:
+- no uses markdown
+- no uses asteriscos, emojis ni formato raro
+- escribe como un nutricionista premium real, no como un texto generico
+- cada recomendacion debe sentirse aplicada al perfil del usuario
+- highlights debe resumir objetivos diarios medibles`;
   }
 
   return `Eres un entrenador personal premium para una app SaaS fitness en espanol.
@@ -258,12 +284,14 @@ Responde SOLO con JSON valido con esta estructura:
   "title": "string",
   "subtitle": "string",
   "intro": "string",
+  "highlights": ["string", "string", "string"],
   "sections": [
     {
       "title": "string",
-      "bullets": ["string", "string", "string"]
+      "bullets": ["string", "string", "string", "string"]
     }
   ],
+  "coach_notes": ["string", "string", "string"],
   "closing": "string"
 }
 
@@ -273,8 +301,15 @@ Incluye secciones concretas sobre:
 - ejercicios clave con series y repeticiones
 - progresion y recuperacion
 - recomendaciones de constancia
+- cardio o gasto calorico complementario
+- tecnica y errores comunes que evitar
 
-Haz que el resultado se vea premium y personalizado.`;
+Importante:
+- no uses markdown
+- no uses asteriscos, emojis ni formato raro
+- escribe como un entrenador premium real, no como un texto generico
+- cada recomendacion debe sentirse aplicada al perfil del usuario
+- highlights debe resumir objetivos semanales medibles`;
 }
 
 async function callGemini(planType: "dieta" | "rutina", profile: FitnessProfile) {

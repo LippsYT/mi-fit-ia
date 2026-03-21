@@ -78,6 +78,87 @@ export type Database = {
         };
         Relationships: [];
       };
+      nutrition_logs: {
+        Row: {
+          calories: number;
+          carbs: number;
+          created_at: string;
+          eaten_at: string;
+          fats: number;
+          id: string;
+          meal_name: string;
+          notes: string | null;
+          protein: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          calories?: number;
+          carbs?: number;
+          created_at?: string;
+          eaten_at?: string;
+          fats?: number;
+          id?: string;
+          meal_name: string;
+          notes?: string | null;
+          protein?: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          calories?: number;
+          carbs?: number;
+          created_at?: string;
+          eaten_at?: string;
+          fats?: number;
+          id?: string;
+          meal_name?: string;
+          notes?: string | null;
+          protein?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      progress_checkins: {
+        Row: {
+          adherence_score: number | null;
+          checkin_date: string;
+          created_at: string;
+          energy_level: number | null;
+          id: string;
+          notes: string | null;
+          updated_at: string;
+          user_id: string;
+          waist: number | null;
+          weight: number | null;
+        };
+        Insert: {
+          adherence_score?: number | null;
+          checkin_date?: string;
+          created_at?: string;
+          energy_level?: number | null;
+          id?: string;
+          notes?: string | null;
+          updated_at?: string;
+          user_id: string;
+          waist?: number | null;
+          weight?: number | null;
+        };
+        Update: {
+          adherence_score?: number | null;
+          checkin_date?: string;
+          created_at?: string;
+          energy_level?: number | null;
+          id?: string;
+          notes?: string | null;
+          updated_at?: string;
+          user_id?: string;
+          waist?: number | null;
+          weight?: number | null;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
           actividad: string | null;

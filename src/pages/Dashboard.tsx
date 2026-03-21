@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Calendar, Crown, Dumbbell, Loader2, Lock, Sparkles, User, Utensils } from "lucide-react";
+import { Apple, Calendar, Crown, Dumbbell, Flame, Loader2, Lock, Scale, Sparkles, Target, TrendingUp, User, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -38,7 +42,75 @@ type SubscriptionRow = {
   status: string;
 };
 
+type NutritionLog = {
+  calories: number;
+  carbs: number;
+  created_at: string;
+  eaten_at: string;
+  fats: number;
+  id: string;
+  meal_name: string;
+  notes: string | null;
+  protein: number;
+  updated_at: string;
+};
+
+type ProgressCheckin = {
+  adherence_score: number | null;
+  checkin_date: string;
+  created_at: string;
+  energy_level: number | null;
+  id: string;
+  notes: string | null;
+  updated_at: string;
+  waist: number | null;
+  weight: number | null;
+};
+
+type MealFormState = {
+  calories: string;
+  carbs: string;
+  fats: string;
+  meal_name: string;
+  notes: string;
+  protein: string;
+};
+
+type CheckinFormState = {
+  adherence_score: string;
+  energy_level: string;
+  notes: string;
+  waist: string;
+  weight: string;
+};
+
+type DailyTargets = {
+  calories: number;
+  carbs: number;
+  fats: number;
+  hydrationLiters: number;
+  protein: number;
+  steps: number;
+};
+
 const previewSections = 2;
+
+const initialMealForm: MealFormState = {
+  calories: "",
+  carbs: "",
+  fats: "",
+  meal_name: "",
+  notes: "",
+  protein: "",
+};
+
+const initialCheckinForm: CheckinFormState = {
+  adherence_score: "4",
+  energy_level: "4",
+  notes: "",
+  waist: "",
+  weight: "",
+};
 
 function isActiveSubscription(subscription: SubscriptionRow | null) {
   if (!subscription) return false;
@@ -78,6 +150,57 @@ function needsMigration(row: PlanRow) {
   return JSON.stringify(row.content) === JSON.stringify(normalized) ? null : normalized;
 }
 
+function roundToNearest(value: number, nearest: number) {
+  return Math.round(value / nearest) * nearest;
+}
+
+function estimateDailyTargets(profile: FitnessProfile | null): DailyTargets | null {
+  if (!profile?.weight || !profile?.height || !profile?.age) {
+    return null;
+  }
+
+  const genderFactor = profile.gender === "masculino" ? 5 : profile.gender === "femenino" ? -161 : -78;
+  const bmr = (10 * profile.weight) + (6.25 * profile.height) - (5 * profile.age) + genderFactor;
+  const activityMultiplier =
+    profile.activity_level === "alto" ? 1.725 :
+    profile.activity_level === "moderado" ? 1.55 :
+    profile.activity_level === "ligero" ? 1.375 :
+    1.2;
+  const goalAdjustment =
+    profile.goal === "bajar_grasa" ? -450 :
+    profile.goal === "ganar_musculo" ? 250 :
+    0;
+  const calories = roundToNearest(Math.max(1300, bmr * activityMultiplier + goalAdjustment), 50);
+  const protein = roundToNearest(profile.weight * (profile.goal === "ganar_musculo" ? 2.1 : profile.goal === "bajar_grasa" ? 1.9 : 1.7), 5);
+  const fats = roundToNearest(Math.max(45, profile.weight * 0.8), 5);
+  const carbs = roundToNearest(Math.max(0, calories - (protein * 4) - (fats * 9)) / 4, 5);
+
+  return {
+    calories,
+    carbs,
+    fats,
+    hydrationLiters: Number((profile.weight * 0.035).toFixed(1)),
+    protein,
+    steps: profile.goal === "bajar_grasa" ? 10000 : 8000,
+  };
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("es-AR").format(Math.round(value));
+}
+
+function clampPercentage(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function isToday(dateLike: string) {
+  return dateLike.slice(0, 10) === new Date().toISOString().slice(0, 10);
+}
+
+function toNumericString(value: number | null | undefined) {
+  return value == null ? "" : String(value);
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { loading: authLoading, session, signOut, user } = useAuth();
@@ -85,13 +208,34 @@ export default function Dashboard() {
   const [dietPlan, setDietPlan] = useState<StoredPlan | null>(null);
   const [workoutPlan, setWorkoutPlan] = useState<StoredPlan | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null);
+  const [nutritionLogs, setNutritionLogs] = useState<NutritionLog[]>([]);
+  const [progressCheckins, setProgressCheckins] = useState<ProgressCheckin[]>([]);
   const [activeTab, setActiveTab] = useState<PlanType>("dieta");
   const [loadingData, setLoadingData] = useState(true);
   const [generating, setGenerating] = useState<PlanType | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [mealSaving, setMealSaving] = useState(false);
+  const [checkinSaving, setCheckinSaving] = useState(false);
+  const [mealForm, setMealForm] = useState<MealFormState>(initialMealForm);
+  const [checkinForm, setCheckinForm] = useState<CheckinFormState>(initialCheckinForm);
 
   const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
   const activePlan = activeTab === "dieta" ? dietPlan : workoutPlan;
+  const dailyTargets = useMemo(() => estimateDailyTargets(profile), [profile]);
+  const todayNutrition = useMemo(() => {
+    const todayLogs = nutritionLogs.filter((log) => isToday(log.eaten_at));
+
+    return todayLogs.reduce(
+      (acc, log) => ({
+        calories: acc.calories + Number(log.calories ?? 0),
+        carbs: acc.carbs + Number(log.carbs ?? 0),
+        fats: acc.fats + Number(log.fats ?? 0),
+        protein: acc.protein + Number(log.protein ?? 0),
+      }),
+      { calories: 0, carbs: 0, fats: 0, protein: 0 },
+    );
+  }, [nutritionLogs]);
+  const latestCheckin = progressCheckins[0] ?? null;
 
   useEffect(() => {
     if (authLoading) return;
@@ -103,7 +247,7 @@ export default function Dashboard() {
     const loadDashboard = async () => {
       setLoadingData(true);
 
-      const [profileResult, plansResult, subscriptionResult] = await Promise.all([
+      const [profileResult, plansResult, subscriptionResult, nutritionResult, checkinsResult] = await Promise.all([
         supabase
           .from("fitness_profiles")
           .select("*")
@@ -118,6 +262,18 @@ export default function Dashboard() {
           .select("status, current_period_end")
           .eq("user_id", user.id)
           .maybeSingle(),
+        supabase
+          .from("nutrition_logs")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("eaten_at", { ascending: false })
+          .limit(12),
+        supabase
+          .from("progress_checkins")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("checkin_date", { ascending: false })
+          .limit(6),
       ]);
 
       if (profileResult.error) {
@@ -129,9 +285,25 @@ export default function Dashboard() {
       if (subscriptionResult.error) {
         console.error("Error cargando subscriptions", subscriptionResult.error);
       }
+      if (nutritionResult.error) {
+        console.error("Error cargando nutrition_logs", nutritionResult.error);
+      }
+      if (checkinsResult.error) {
+        console.error("Error cargando progress_checkins", checkinsResult.error);
+      }
 
-      setProfile((profileResult.data as FitnessProfile | null) ?? null);
+      const nextProfile = (profileResult.data as FitnessProfile | null) ?? null;
+      const nextCheckins = (checkinsResult.data as ProgressCheckin[] | null) ?? [];
+
+      setProfile(nextProfile);
       setSubscription((subscriptionResult.data as SubscriptionRow | null) ?? null);
+      setNutritionLogs((nutritionResult.data as NutritionLog[] | null) ?? []);
+      setProgressCheckins(nextCheckins);
+      setCheckinForm((current) => ({
+        ...current,
+        weight: current.weight || toNumericString(nextCheckins[0]?.weight ?? nextProfile?.weight),
+        waist: current.waist || toNumericString(nextCheckins[0]?.waist),
+      }));
 
       const planRows = (plansResult.data ?? []) as PlanRow[];
       setDietPlan(pickLatestPlan(planRows, "dieta"));
@@ -262,6 +434,142 @@ export default function Dashboard() {
     }
   };
 
+  const handleSaveMeal = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!user) return;
+    if (!hasPremiumAccess) {
+      toast({
+        title: "Funcion premium",
+        description: "El seguimiento nutricional diario se desbloquea con la suscripcion premium.",
+      });
+      return;
+    }
+
+    if (!mealForm.meal_name.trim() || !mealForm.calories.trim()) {
+      toast({
+        title: "Completa la comida",
+        description: "Necesitamos al menos el nombre de la comida y las calorias.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setMealSaving(true);
+
+    const payload = {
+      user_id: user.id,
+      meal_name: mealForm.meal_name.trim(),
+      calories: Number(mealForm.calories) || 0,
+      protein: Number(mealForm.protein) || 0,
+      carbs: Number(mealForm.carbs) || 0,
+      fats: Number(mealForm.fats) || 0,
+      notes: mealForm.notes.trim() || null,
+    };
+
+    const { data, error } = await supabase
+      .from("nutrition_logs")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    setMealSaving(false);
+
+    if (error) {
+      console.error("Error guardando nutrition_logs", error, payload);
+      toast({
+        title: "No se pudo guardar la comida",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setNutritionLogs((current) => [data as NutritionLog, ...current]
+      .sort((a, b) => new Date(b.eaten_at).getTime() - new Date(a.eaten_at).getTime())
+      .slice(0, 12));
+    setMealForm(initialMealForm);
+
+    toast({
+      title: "Comida registrada",
+      description: "El seguimiento de calorias y macros de hoy ya fue actualizado.",
+    });
+  };
+
+  const handleSaveCheckin = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!user) return;
+    if (!hasPremiumAccess) {
+      toast({
+        title: "Funcion premium",
+        description: "Los check-ins y el seguimiento de progreso forman parte del premium.",
+      });
+      return;
+    }
+
+    if (!checkinForm.weight.trim()) {
+      toast({
+        title: "Falta el peso actual",
+        description: "Necesitamos tu peso para guardar el check-in.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCheckinSaving(true);
+
+    const payload = {
+      user_id: user.id,
+      checkin_date: new Date().toISOString().slice(0, 10),
+      weight: Number(checkinForm.weight) || null,
+      waist: Number(checkinForm.waist) || null,
+      energy_level: Number(checkinForm.energy_level) || null,
+      adherence_score: Number(checkinForm.adherence_score) || null,
+      notes: checkinForm.notes.trim() || null,
+    };
+
+    const { data, error } = await supabase
+      .from("progress_checkins")
+      .upsert(payload, { onConflict: "user_id,checkin_date" })
+      .select("*")
+      .single();
+
+    if (!error && payload.weight) {
+      const { error: profileError } = await supabase
+        .from("fitness_profiles")
+        .update({ weight: payload.weight })
+        .eq("user_id", user.id);
+
+      if (profileError) {
+        console.error("No se pudo sincronizar el peso con fitness_profiles", profileError);
+      } else {
+        setProfile((current) => current ? { ...current, weight: payload.weight } : current);
+      }
+    }
+
+    setCheckinSaving(false);
+
+    if (error) {
+      console.error("Error guardando progress_checkins", error, payload);
+      toast({
+        title: "No se pudo guardar el check-in",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setProgressCheckins((current) => [data as ProgressCheckin, ...current.filter((item) => item.checkin_date !== (data as ProgressCheckin).checkin_date)]
+      .sort((a, b) => new Date(b.checkin_date).getTime() - new Date(a.checkin_date).getTime())
+      .slice(0, 6));
+
+    toast({
+      title: "Check-in guardado",
+      description: "Tu progreso de hoy ya fue registrado.",
+    });
+  };
+
   if (authLoading || loadingData) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -315,12 +623,12 @@ export default function Dashboard() {
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="font-display text-2xl font-bold">
-                {hasPremiumAccess ? "Dashboard premium" : "Vista previa premium"}
+                {hasPremiumAccess ? "Tu coach premium diario" : "Vista previa premium"}
               </h1>
               <p className="mt-2 max-w-xl text-sm text-muted-foreground">
                 {hasPremiumAccess
-                  ? "Tu suscripcion esta activa. Puedes ver el contenido completo del dashboard."
-                  : "Estas viendo una version limitada. Activa tu suscripcion mensual para desbloquear dieta y rutina completas."}
+                  ? "Tu dashboard ahora combina plan, seguimiento nutricional, check-ins de progreso y objetivos diarios para acercarse a una experiencia de coach real."
+                  : "El premium desbloquea seguimiento diario de comidas, control de calorias y macros, check-ins de progreso y planes mucho mas accionables."}
               </p>
             </div>
             {!hasPremiumAccess && (
@@ -360,6 +668,48 @@ export default function Dashboard() {
             <Link to="/formulario">
               <Button>Completar ahora</Button>
             </Link>
+          </div>
+        )}
+
+        {dailyTargets && (
+          <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="glass-card rounded-2xl p-5">
+              <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <Flame className="h-4 w-4 text-primary" />
+                Calorias de hoy
+              </div>
+              <div className="text-2xl font-bold">{formatNumber(todayNutrition.calories)} / {formatNumber(dailyTargets.calories)}</div>
+              <Progress className="mt-3" value={clampPercentage((todayNutrition.calories / dailyTargets.calories) * 100)} />
+            </div>
+
+            <div className="glass-card rounded-2xl p-5">
+              <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <Apple className="h-4 w-4 text-primary" />
+                Proteina
+              </div>
+              <div className="text-2xl font-bold">{formatNumber(todayNutrition.protein)} g</div>
+              <p className="mt-2 text-sm text-muted-foreground">Meta diaria: {formatNumber(dailyTargets.protein)} g</p>
+            </div>
+
+            <div className="glass-card rounded-2xl p-5">
+              <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <Target className="h-4 w-4 text-primary" />
+                Objetivo diario
+              </div>
+              <div className="text-2xl font-bold">{formatNumber(dailyTargets.steps)}</div>
+              <p className="mt-2 text-sm text-muted-foreground">pasos sugeridos y {dailyTargets.hydrationLiters} L de agua</p>
+            </div>
+
+            <div className="glass-card rounded-2xl p-5">
+              <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                Ultimo check-in
+              </div>
+              <div className="text-2xl font-bold">{latestCheckin?.weight ? `${latestCheckin.weight} kg` : "--"}</div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {latestCheckin ? `Adherencia ${latestCheckin.adherence_score ?? "-"} / 5` : "Todavia no registraste progreso"}
+              </p>
+            </div>
           </div>
         )}
 
@@ -422,6 +772,16 @@ export default function Dashboard() {
               <p className="mt-1 text-sm text-primary">{activePlan.content.subtitle}</p>
               <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{activePlan.content.intro}</p>
 
+              {Boolean(activePlan.content.highlights?.length) && (
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {activePlan.content.highlights?.map((highlight) => (
+                    <span key={highlight} className="rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                      {highlight}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               <div className="mt-6 space-y-4">
                 {activePlan.content.sections.map((section, index) => {
                   const locked = !hasPremiumAccess && index >= previewSections;
@@ -431,7 +791,10 @@ export default function Dashboard() {
                       <h4 className="font-display text-lg font-semibold">{section.title}</h4>
                       <ul className={`mt-3 space-y-2 text-sm text-muted-foreground ${locked ? "select-none blur-sm" : ""}`}>
                         {section.bullets.map((bullet) => (
-                          <li key={bullet}>- {bullet}</li>
+                          <li key={bullet} className="flex gap-2">
+                            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                            <span>{bullet}</span>
+                          </li>
                         ))}
                       </ul>
                     </div>
@@ -439,18 +802,280 @@ export default function Dashboard() {
                 })}
               </div>
 
+              {Boolean(activePlan.content.coach_notes?.length) && (
+                <div className={`mt-6 rounded-xl border border-primary/15 bg-primary/5 p-4 ${!hasPremiumAccess ? "select-none blur-sm" : ""}`}>
+                  <h4 className="font-display text-lg font-semibold">Observaciones del coach</h4>
+                  <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                    {activePlan.content.coach_notes?.map((note) => (
+                      <li key={note} className="flex gap-2">
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                        <span>{note}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <p className={`mt-6 text-sm leading-relaxed text-muted-foreground ${!hasPremiumAccess ? "select-none blur-sm" : ""}`}>
                 {activePlan.content.closing}
               </p>
             </div>
           )}
 
+          <div className="grid gap-6 xl:grid-cols-2">
+            <div className={`glass-card rounded-2xl p-6 ${!hasPremiumAccess ? "relative overflow-hidden" : ""}`}>
+              {!hasPremiumAccess && <div className="absolute inset-0 z-10 bg-background/45 backdrop-blur-[2px]" />}
+
+              <div className={!hasPremiumAccess ? "select-none blur-sm" : ""}>
+                <div className="mb-5 flex items-center gap-2">
+                  <Apple className="h-5 w-5 text-primary" />
+                  <h3 className="font-display text-xl font-bold">Seguimiento nutricional diario</h3>
+                </div>
+
+                <form onSubmit={handleSaveMeal} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="meal_name">Que comiste</Label>
+                    <Input
+                      id="meal_name"
+                      value={mealForm.meal_name}
+                      onChange={(event) => setMealForm((current) => ({ ...current, meal_name: event.target.value }))}
+                      placeholder="Ej: almuerzo con arroz, pollo y ensalada"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="meal_calories">Calorias</Label>
+                      <Input
+                        id="meal_calories"
+                        type="number"
+                        value={mealForm.calories}
+                        onChange={(event) => setMealForm((current) => ({ ...current, calories: event.target.value }))}
+                        placeholder="650"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="meal_protein">Proteina</Label>
+                      <Input
+                        id="meal_protein"
+                        type="number"
+                        value={mealForm.protein}
+                        onChange={(event) => setMealForm((current) => ({ ...current, protein: event.target.value }))}
+                        placeholder="40"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="meal_carbs">Carbohidratos</Label>
+                      <Input
+                        id="meal_carbs"
+                        type="number"
+                        value={mealForm.carbs}
+                        onChange={(event) => setMealForm((current) => ({ ...current, carbs: event.target.value }))}
+                        placeholder="55"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="meal_fats">Grasas</Label>
+                      <Input
+                        id="meal_fats"
+                        type="number"
+                        value={mealForm.fats}
+                        onChange={(event) => setMealForm((current) => ({ ...current, fats: event.target.value }))}
+                        placeholder="18"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="meal_notes">Observacion</Label>
+                    <Textarea
+                      id="meal_notes"
+                      value={mealForm.notes}
+                      onChange={(event) => setMealForm((current) => ({ ...current, notes: event.target.value }))}
+                      placeholder="Ej: mucha hambre post entreno, poca agua, buena digestion"
+                    />
+                  </div>
+
+                  <Button type="submit" disabled={mealSaving}>
+                    {mealSaving ? "Guardando..." : "Registrar comida"}
+                  </Button>
+                </form>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border/60 bg-background/20 p-4">
+                    <div className="text-sm text-muted-foreground">Hoy consumido</div>
+                    <div className="mt-2 text-2xl font-bold">{formatNumber(todayNutrition.calories)} kcal</div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      P {formatNumber(todayNutrition.protein)}g · C {formatNumber(todayNutrition.carbs)}g · G {formatNumber(todayNutrition.fats)}g
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/20 p-4">
+                    <div className="text-sm text-muted-foreground">Meta estimada</div>
+                    <div className="mt-2 text-2xl font-bold">{dailyTargets ? `${formatNumber(dailyTargets.calories)} kcal` : "--"}</div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      P {dailyTargets ? formatNumber(dailyTargets.protein) : "--"}g · C {dailyTargets ? formatNumber(dailyTargets.carbs) : "--"}g · G {dailyTargets ? formatNumber(dailyTargets.fats) : "--"}g
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  <h4 className="font-display text-lg font-semibold">Ultimas comidas</h4>
+                  {nutritionLogs.length ? nutritionLogs.map((log) => (
+                    <div key={log.id} className="rounded-xl border border-border/60 bg-background/20 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="font-medium">{log.meal_name}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {new Date(log.eaten_at).toLocaleString("es-AR")}
+                          </div>
+                        </div>
+                        <div className="text-right text-sm text-muted-foreground">
+                          <div className="font-semibold text-foreground">{formatNumber(log.calories)} kcal</div>
+                          <div>P {formatNumber(log.protein)} · C {formatNumber(log.carbs)} · G {formatNumber(log.fats)}</div>
+                        </div>
+                      </div>
+                      {log.notes && <p className="mt-3 text-sm text-muted-foreground">{log.notes}</p>}
+                    </div>
+                  )) : (
+                    <p className="text-sm text-muted-foreground">Todavia no registraste comidas.</p>
+                  )}
+                </div>
+              </div>
+
+              {!hasPremiumAccess && (
+                <div className="absolute inset-x-0 bottom-0 z-20 p-6">
+                  <div className="rounded-2xl border border-primary/20 bg-background/90 p-5 shadow-2xl backdrop-blur">
+                    <h4 className="font-display text-lg font-bold">Premium con seguimiento real</h4>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Registra lo que comiste, controla calorias y macros del dia y usa el dashboard como una bitacora nutricional real.
+                    </p>
+                    <Button className="mt-4" variant="hero" onClick={() => void handleSubscribe()} disabled={checkoutLoading}>
+                      Desbloquear premium
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className={`glass-card rounded-2xl p-6 ${!hasPremiumAccess ? "relative overflow-hidden" : ""}`}>
+              {!hasPremiumAccess && <div className="absolute inset-0 z-10 bg-background/45 backdrop-blur-[2px]" />}
+
+              <div className={!hasPremiumAccess ? "select-none blur-sm" : ""}>
+                <div className="mb-5 flex items-center gap-2">
+                  <Scale className="h-5 w-5 text-primary" />
+                  <h3 className="font-display text-xl font-bold">Check-in de progreso</h3>
+                </div>
+
+                <form onSubmit={handleSaveCheckin} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="checkin_weight">Peso actual</Label>
+                      <Input
+                        id="checkin_weight"
+                        type="number"
+                        value={checkinForm.weight}
+                        onChange={(event) => setCheckinForm((current) => ({ ...current, weight: event.target.value }))}
+                        placeholder="74.5"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="checkin_waist">Cintura</Label>
+                      <Input
+                        id="checkin_waist"
+                        type="number"
+                        value={checkinForm.waist}
+                        onChange={(event) => setCheckinForm((current) => ({ ...current, waist: event.target.value }))}
+                        placeholder="82"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="checkin_energy">Energia (1-5)</Label>
+                      <Input
+                        id="checkin_energy"
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={checkinForm.energy_level}
+                        onChange={(event) => setCheckinForm((current) => ({ ...current, energy_level: event.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="checkin_adherence">Adherencia (1-5)</Label>
+                      <Input
+                        id="checkin_adherence"
+                        type="number"
+                        min="1"
+                        max="5"
+                        value={checkinForm.adherence_score}
+                        onChange={(event) => setCheckinForm((current) => ({ ...current, adherence_score: event.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="checkin_notes">Notas del check-in</Label>
+                    <Textarea
+                      id="checkin_notes"
+                      value={checkinForm.notes}
+                      onChange={(event) => setCheckinForm((current) => ({ ...current, notes: event.target.value }))}
+                      placeholder="Ej: mejor descanso, mas fuerza, hambre alta a la tarde"
+                    />
+                  </div>
+
+                  <Button type="submit" disabled={checkinSaving}>
+                    {checkinSaving ? "Guardando..." : "Guardar check-in"}
+                  </Button>
+                </form>
+
+                <div className="mt-6 space-y-3">
+                  <h4 className="font-display text-lg font-semibold">Historial reciente</h4>
+                  {progressCheckins.length ? progressCheckins.map((checkin) => (
+                    <div key={checkin.id} className="rounded-xl border border-border/60 bg-background/20 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="font-medium">{new Date(checkin.checkin_date).toLocaleDateString("es-AR")}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Energia {checkin.energy_level ?? "-"} / 5 · Adherencia {checkin.adherence_score ?? "-"} / 5
+                          </div>
+                        </div>
+                        <div className="text-right text-sm text-muted-foreground">
+                          <div className="font-semibold text-foreground">{checkin.weight ? `${checkin.weight} kg` : "--"}</div>
+                          <div>{checkin.waist ? `${checkin.waist} cm cintura` : "Sin cintura"}</div>
+                        </div>
+                      </div>
+                      {checkin.notes && <p className="mt-3 text-sm text-muted-foreground">{checkin.notes}</p>}
+                    </div>
+                  )) : (
+                    <p className="text-sm text-muted-foreground">Todavia no registraste check-ins.</p>
+                  )}
+                </div>
+              </div>
+
+              {!hasPremiumAccess && (
+                <div className="absolute inset-x-0 bottom-0 z-20 p-6">
+                  <div className="rounded-2xl border border-primary/20 bg-background/90 p-5 shadow-2xl backdrop-blur">
+                    <h4 className="font-display text-lg font-bold">Seguimiento como coach real</h4>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Guarda peso, cintura, energia y adherencia para tomar decisiones reales y no depender solo de un texto generado.
+                    </p>
+                    <Button className="mt-4" variant="hero" onClick={() => void handleSubscribe()} disabled={checkoutLoading}>
+                      Activar premium
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {!hasPremiumAccess && activePlan && (
             <div className="glass-card rounded-2xl p-6 text-center">
               <Lock className="mx-auto mb-3 h-8 w-8 text-primary" />
-              <h3 className="font-display text-lg font-bold">Desbloquea el dashboard completo</h3>
-              <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                Activa la suscripcion mensual para ver todas las secciones del plan, regenerar sin limites y acceder a la experiencia premium completa.
+              <h3 className="font-display text-lg font-bold">Desbloquea el coach premium completo</h3>
+              <p className="mx-auto mt-2 max-w-2xl text-sm text-muted-foreground">
+                El premium ahora incluye plan completo, seguimiento nutricional diario, control de calorias y macros, check-ins de progreso y regeneracion orientada a resultados reales.
               </p>
               <Button className="mt-4" variant="hero" onClick={() => void handleSubscribe()} disabled={checkoutLoading}>
                 {checkoutLoading ? "Redirigiendo..." : "Suscribirme ahora"}
