@@ -148,6 +148,10 @@ const initialDailyMealForm: DailyMealFormState = {
   snacks: "",
 };
 
+const edgeFunctionsUrl = import.meta.env.VITE_SUPABASE_URL;
+const edgeFunctionsKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
 function isActiveSubscription(subscription: SubscriptionRow | null) {
   if (!subscription) return false;
   if (!["active", "trialing"].includes(subscription.status)) return false;
@@ -276,7 +280,7 @@ export default function Dashboard() {
   const [dailyMealForm, setDailyMealForm] = useState<DailyMealFormState>(initialDailyMealForm);
   const [consultationQuestion, setConsultationQuestion] = useState("");
 
-  const getFunctionHeaders = async () => {
+  const getFunctionAccessToken = async () => {
     const currentSessionResult = await supabase.auth.getSession();
     let activeSession = currentSessionResult.data.session ?? session;
 
@@ -297,9 +301,54 @@ export default function Dashboard() {
       }
     }
 
-    return activeSession?.access_token
-      ? { Authorization: `Bearer ${activeSession.access_token}` }
-      : null;
+    return activeSession?.access_token ?? null;
+  };
+
+  const invokeEdgeFunction = async <T,>(functionName: string, body: unknown, accessToken: string) => {
+    if (!edgeFunctionsUrl || !edgeFunctionsKey) {
+      throw new Error("Supabase no esta configurado correctamente.");
+    }
+
+    const response = await fetch(`${edgeFunctionsUrl}/functions/v1/${functionName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: edgeFunctionsKey,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    const rawResponse = await response.text();
+    let parsedResponse: unknown = null;
+
+    if (rawResponse) {
+      try {
+        parsedResponse = JSON.parse(rawResponse);
+      } catch {
+        parsedResponse = rawResponse;
+      }
+    }
+
+    if (!response.ok) {
+      console.error(`Error HTTP invocando ${functionName}`, {
+        body: parsedResponse,
+        status: response.status,
+      });
+
+      const message =
+        parsedResponse && typeof parsedResponse === "object"
+          ? "error" in parsedResponse && typeof parsedResponse.error === "string"
+            ? parsedResponse.error
+            : "message" in parsedResponse && typeof parsedResponse.message === "string"
+              ? parsedResponse.message
+              : null
+          : null;
+
+      throw new Error(message ?? `Edge Function returned ${response.status}`);
+    }
+
+    return parsedResponse as T;
   };
 
   const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
@@ -455,8 +504,8 @@ export default function Dashboard() {
 
   const handleGenerate = async (planType: PlanType) => {
     if (!user) return;
-    const headers = await getFunctionHeaders();
-    if (!headers) {
+    const accessToken = await getFunctionAccessToken();
+    if (!accessToken) {
       toast({
         title: "Debes iniciar sesion",
         description: "No pudimos validar tu sesion para generar el plan.",
@@ -478,15 +527,11 @@ export default function Dashboard() {
     setGenerating(planType);
 
     try {
-      const { data: generatedResponse, error: generateError } = await supabase.functions.invoke("generate-plan", {
-        body: { planType },
-        headers,
-      });
-
-      if (generateError) {
-        console.error("Error invocando generate-plan", generateError, { planType });
-        throw new Error(generateError.message || "No se pudo generar el plan desde el backend");
-      }
+      const generatedResponse = await invokeEdgeFunction<{ result?: unknown }>(
+        "generate-plan",
+        { planType },
+        accessToken,
+      );
 
       const generated = generatedResponse?.result;
       if (!generated) {
@@ -644,8 +689,8 @@ export default function Dashboard() {
     event.preventDefault();
 
     if (!user || !profile) return;
-    const headers = await getFunctionHeaders();
-    if (!headers) {
+    const accessToken = await getFunctionAccessToken();
+    if (!accessToken) {
       toast({
         title: "Debes iniciar sesion",
         description: "No pudimos validar tu sesion para analizar tus comidas.",
@@ -678,19 +723,15 @@ export default function Dashboard() {
     setMealSaving(true);
 
     try {
-      const { data: analysis, error: analysisError } = await supabase.functions.invoke("analyze-meals", {
-        body: {
+      const analysis = await invokeEdgeFunction<DailyNutritionAnalysis>(
+        "analyze-meals",
+        {
           meals,
           profile,
           targets: dailyTargets,
         },
-        headers,
-      });
-
-      if (analysisError) {
-        console.error("Error invocando analyze-meals", analysisError);
-        throw new Error(analysisError.message || "No se pudo analizar el dia desde el backend");
-      }
+        accessToken,
+      );
 
       if (!analysis) {
         throw new Error("La funcion analyze-meals no devolvio contenido valido");
@@ -849,8 +890,8 @@ export default function Dashboard() {
     event.preventDefault();
 
     if (!user || !profile) return;
-    const headers = await getFunctionHeaders();
-    if (!headers) {
+    const accessToken = await getFunctionAccessToken();
+    if (!accessToken) {
       toast({
         title: "Debes iniciar sesion",
         description: "No pudimos validar tu sesion para consultar al coach.",
@@ -885,19 +926,15 @@ export default function Dashboard() {
         latestCheckin?.weight ? `Ultimo peso ${latestCheckin.weight} kg` : "",
       ].filter(Boolean).join(" | ");
 
-      const { data: consultation, error: consultationError } = await supabase.functions.invoke("ask-coach", {
-        body: {
+      const consultation = await invokeEdgeFunction<NutritionConsultation>(
+        "ask-coach",
+        {
           question: consultationQuestion,
           profile,
           contextSummary,
         },
-        headers,
-      });
-
-      if (consultationError) {
-        console.error("Error invocando ask-coach", consultationError);
-        throw new Error(consultationError.message || "No se pudo consultar al coach desde el backend");
-      }
+        accessToken,
+      );
 
       if (!consultation) {
         throw new Error("La funcion ask-coach no devolvio contenido valido");
@@ -1217,10 +1254,10 @@ export default function Dashboard() {
                           <Button
                             size="sm"
                             variant={workoutProgressRow?.completed ? "default" : "outline"}
-                            disabled={!hasPremiumAccess || savingWorkoutDay === section.title}
+                            disabled={!hasPremiumAccess || workoutSaving === section.title}
                             onClick={() => void handleToggleWorkoutDay(section.title)}
                           >
-                            {savingWorkoutDay === section.title ? "Guardando..." : workoutProgressRow?.completed ? "Hecho" : "Marcar"}
+                            {workoutSaving === section.title ? "Guardando..." : workoutProgressRow?.completed ? "Hecho" : "Marcar"}
                           </Button>
                         ) : null}
                       </div>
