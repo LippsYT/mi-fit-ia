@@ -1,5 +1,5 @@
-import { getSupabaseAdmin, getAuthenticatedUserFromAccessToken } from "./_lib/supabase";
-import { getStripeClient } from "./_lib/stripe";
+import { getSupabaseAdmin, getAuthenticatedUserFromAccessToken } from "./_lib/supabase.js";
+import { getStripeClient } from "./_lib/stripe.js";
 
 type JsonResponse = {
   error?: string;
