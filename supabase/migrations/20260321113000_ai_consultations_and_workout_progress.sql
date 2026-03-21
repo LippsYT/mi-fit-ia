@@ -13,7 +13,10 @@ $$;
 alter table public.nutrition_logs
   add column if not exists meal_type text,
   add column if not exists food_description text,
-  add column if not exists ai_summary text;
+  add column if not exists ai_summary text,
+  add column if not exists eaten_at timestamptz not null default now(),
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
 
 create table if not exists public.ai_consultations (
   id uuid primary key default gen_random_uuid(),
@@ -26,6 +29,15 @@ create table if not exists public.ai_consultations (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.ai_consultations
+  add column if not exists consultation_type text not null default 'quick_question',
+  add column if not exists question text not null default '',
+  add column if not exists answer text not null default '',
+  add column if not exists action_steps jsonb not null default '[]'::jsonb,
+  add column if not exists context_payload jsonb not null default '{}'::jsonb,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
 
 create index if not exists ai_consultations_user_created_at_idx
   on public.ai_consultations (user_id, created_at desc);
@@ -97,6 +109,14 @@ create table if not exists public.workout_progress (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.workout_progress
+  add column if not exists plan_id uuid,
+  add column if not exists workout_day text,
+  add column if not exists completed boolean not null default false,
+  add column if not exists completed_at timestamptz,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
 
 create unique index if not exists workout_progress_user_plan_day_idx
   on public.workout_progress (user_id, plan_id, workout_day);

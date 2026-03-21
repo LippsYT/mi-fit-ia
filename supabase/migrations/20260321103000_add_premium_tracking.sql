@@ -24,6 +24,16 @@ create table if not exists public.nutrition_logs (
   updated_at timestamptz not null default now()
 );
 
+alter table public.nutrition_logs
+  add column if not exists eaten_at timestamptz not null default now(),
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now(),
+  add column if not exists notes text,
+  add column if not exists calories numeric not null default 0,
+  add column if not exists protein numeric not null default 0,
+  add column if not exists carbs numeric not null default 0,
+  add column if not exists fats numeric not null default 0;
+
 create index if not exists nutrition_logs_user_eaten_at_idx
   on public.nutrition_logs (user_id, eaten_at desc);
 
@@ -96,6 +106,16 @@ create table if not exists public.progress_checkins (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.progress_checkins
+  add column if not exists checkin_date date not null default current_date,
+  add column if not exists weight numeric,
+  add column if not exists waist numeric,
+  add column if not exists energy_level integer,
+  add column if not exists adherence_score integer,
+  add column if not exists notes text,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
 
 create unique index if not exists progress_checkins_user_checkin_date_idx
   on public.progress_checkins (user_id, checkin_date);
