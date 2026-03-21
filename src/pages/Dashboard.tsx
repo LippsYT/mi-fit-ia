@@ -19,6 +19,7 @@ import {
   type PremiumPlan,
 } from "@/lib/gemini";
 import { startCheckout } from "@/lib/checkout";
+import heroImage from "@/assets/hero-fitness.jpg";
 
 type PlanType = "dieta" | "rutina";
 type DashboardTab = PlanType | "ejercicios";
@@ -143,6 +144,13 @@ type ExerciseDayPlan = {
   focus: string;
   intensity: string;
   objective: string;
+};
+
+type ExerciseWeekPhase = {
+  actionLabel: string;
+  durationDelta: number;
+  monthlyHook: string;
+  title: string;
 };
 
 const previewSections = 2;
@@ -541,6 +549,282 @@ const exerciseProgramsByGoal: Record<string, ExerciseDayPlan[]> = {
   ],
 };
 
+const weeklyExercisePhases: ExerciseWeekPhase[] = [
+  {
+    title: "Semana de base",
+    actionLabel: "Base tecnica",
+    durationDelta: 0,
+    monthlyHook: "Refinas tecnica y dejas una base fuerte para progresar.",
+  },
+  {
+    title: "Semana de progresion",
+    actionLabel: "Progresion de carga",
+    durationDelta: 4,
+    monthlyHook: "Subes volumen y haces que el plan se sienta vivo cada semana.",
+  },
+  {
+    title: "Semana de intensidad",
+    actionLabel: "Intensidad premium",
+    durationDelta: 6,
+    monthlyHook: "Aprietas el bloque con mas foco y mas exigencia real.",
+  },
+  {
+    title: "Semana de reset inteligente",
+    actionLabel: "Recuperacion activa",
+    durationDelta: -4,
+    monthlyHook: "Bajas fatiga, mantienes consistencia y preparas el siguiente mes.",
+  },
+];
+
+const supportDaysByGoal: Record<string, ExerciseDayPlan[]> = {
+  bajar_grasa: [
+    {
+      dayLabel: "Dia 3",
+      durationMinutes: 26,
+      focus: "Circuito full body",
+      intensity: "Media",
+      objective: "Mantener gasto alto en un bloque corto y sostenible",
+      exercises: [
+        {
+          name: "Sentadilla goblet ligera",
+          focus: "Full body",
+          illustration: "squat",
+          cadence: "15 reps",
+          sets: "3 series",
+          rest: "30 segundos",
+          reason: "Sirve como movimiento base para sostener ritmo y tecnica.",
+          steps: [
+            "Sujeta la carga cerca del pecho.",
+            "Baja con control y sube sin perder postura.",
+            "Respira rapido pero ordenado entre repeticiones.",
+          ],
+        },
+        {
+          name: "Remo con mancuerna",
+          focus: "Espalda",
+          illustration: "row",
+          cadence: "12 reps por brazo",
+          sets: "3 series",
+          rest: "30 segundos",
+          reason: "Compensa el circuito y mantiene masa muscular activa.",
+          steps: [
+            "Apoya una mano y deja espalda larga.",
+            "Lleva el codo hacia atras sin girarte.",
+            "Desciende lento y repite.",
+          ],
+        },
+      ],
+    },
+    {
+      dayLabel: "Dia 4",
+      durationMinutes: 24,
+      focus: "Cardio inteligente",
+      intensity: "Media / alta",
+      objective: "Meter trabajo cardiovascular sin romper recuperacion",
+      exercises: [
+        {
+          name: "Intervalos en bici",
+          focus: "Condicionamiento",
+          illustration: "bike",
+          cadence: "40 s fuerte / 20 s suave",
+          sets: "12 rondas",
+          rest: "Sin pausa extra",
+          reason: "Da sensacion de trabajo real y mejora adherencia semanal.",
+          steps: [
+            "Empieza con dos minutos suaves.",
+            "Acelera en los bloques fuertes sin encorvarte.",
+            "Recupera corto y vuelve a apretar.",
+          ],
+        },
+      ],
+    },
+    {
+      dayLabel: "Dia 5",
+      durationMinutes: 18,
+      focus: "Movilidad + core",
+      intensity: "Baja",
+      objective: "Seguir activo aun en dia liviano para no cortar el habito",
+      exercises: [
+        {
+          name: "Farmer walk liviano",
+          focus: "Core",
+          illustration: "carry",
+          cadence: "30 metros",
+          sets: "3 pasadas",
+          rest: "30 segundos",
+          reason: "Te deja activo y reforzando postura sin desgastarte.",
+          steps: [
+            "Camina alto y estable.",
+            "Aprieta abdomen y evita balancearte.",
+            "Corta la pasada antes de perder forma.",
+          ],
+        },
+      ],
+    },
+  ],
+  ganar_musculo: [
+    {
+      dayLabel: "Dia 4",
+      durationMinutes: 34,
+      focus: "Brazos + hombros",
+      intensity: "Media",
+      objective: "Dar volumen extra a zonas visibles y vendibles del progreso",
+      exercises: [
+        {
+          name: "Press inclinado",
+          focus: "Torso superior",
+          illustration: "bench",
+          cadence: "10 reps",
+          sets: "3 series",
+          rest: "60 segundos",
+          reason: "Agrega volumen visual al torso sin duplicar el mismo estimulo.",
+          steps: [
+            "Escapulas atras antes de bajar.",
+            "Baja hacia pecho alto con control.",
+            "Empuja de forma continua, sin rebotar.",
+          ],
+        },
+        {
+          name: "Farmer walk",
+          focus: "Trapecio + core",
+          illustration: "carry",
+          cadence: "35 metros",
+          sets: "4 pasadas",
+          rest: "45 segundos",
+          reason: "Da sensacion atletica y mejora la presencia corporal general.",
+          steps: [
+            "Toma firme las mancuernas.",
+            "Camina alto, pecho abierto.",
+            "No dejes caer hombros ni abdomen.",
+          ],
+        },
+      ],
+    },
+    {
+      dayLabel: "Dia 5",
+      durationMinutes: 22,
+      focus: "Tecnica + bombeo",
+      intensity: "Media / baja",
+      objective: "Cerrar la semana sumando estimulo sin enterrarte en fatiga",
+      exercises: [
+        {
+          name: "Dominadas asistidas",
+          focus: "Espalda",
+          illustration: "pull",
+          cadence: "8 reps",
+          sets: "3 series",
+          rest: "60 segundos",
+          reason: "Mantiene calidad de traccion y mejora la espalda visible.",
+          steps: [
+            "Empieza con hombros abajo.",
+            "Sube pecho hacia barra.",
+            "Baja lento para exprimir cada repeticion.",
+          ],
+        },
+        {
+          name: "Sentadilla trasera ligera",
+          focus: "Tecnica de pierna",
+          illustration: "squat",
+          cadence: "10 reps",
+          sets: "2 series",
+          rest: "45 segundos",
+          reason: "Te deja practicar tecnica sin sumar demasiada fatiga.",
+          steps: [
+            "Pies firmes y mirada al frente.",
+            "Baja con control.",
+            "Sube empujando desde el piso.",
+          ],
+        },
+      ],
+    },
+  ],
+  mantener: [
+    {
+      dayLabel: "Dia 3",
+      durationMinutes: 24,
+      focus: "Full body ligero",
+      intensity: "Media",
+      objective: "Mantener ritmo semanal sin pasarte de rosca",
+      exercises: [
+        {
+          name: "Sentadilla frontal",
+          focus: "Piernas + core",
+          illustration: "squat",
+          cadence: "8 reps",
+          sets: "3 series",
+          rest: "50 segundos",
+          reason: "Recuerda tecnica y mantiene fuerza base.",
+          steps: [
+            "Codos altos y pecho abierto.",
+            "Baja manteniendo talones pegados.",
+            "Sube sin perder linea del torso.",
+          ],
+        },
+        {
+          name: "Remo con mancuerna",
+          focus: "Espalda",
+          illustration: "row",
+          cadence: "10 reps por lado",
+          sets: "3 series",
+          rest: "40 segundos",
+          reason: "Da equilibrio al torso con poco desgaste.",
+          steps: [
+            "Apoya bien la base.",
+            "Tira codo atras.",
+            "Baja lento con control.",
+          ],
+        },
+      ],
+    },
+    {
+      dayLabel: "Dia 4",
+      durationMinutes: 20,
+      focus: "Cardio suave",
+      intensity: "Baja / media",
+      objective: "Mantener sensacion atletica y adherencia semanal",
+      exercises: [
+        {
+          name: "Intervalos en bici",
+          focus: "Cardio",
+          illustration: "bike",
+          cadence: "30 s medio / 30 s suave",
+          sets: "10 rondas",
+          rest: "Sin pausa extra",
+          reason: "Mantiene condicion sin volverse invasivo.",
+          steps: [
+            "Toma ritmo progresivo.",
+            "Acelera sin perder postura.",
+            "Recupera y vuelve a entrar.",
+          ],
+        },
+      ],
+    },
+    {
+      dayLabel: "Dia 5",
+      durationMinutes: 18,
+      focus: "Postura + agarre",
+      intensity: "Baja",
+      objective: "Cerrar la semana con un dia facil pero util",
+      exercises: [
+        {
+          name: "Farmer walk",
+          focus: "Core + agarre",
+          illustration: "carry",
+          cadence: "30 metros",
+          sets: "3 pasadas",
+          rest: "30 segundos",
+          reason: "Te hace sentir activo y fuerte con muy poco desgaste.",
+          steps: [
+            "Camina firme y alto.",
+            "Aprieta abdomen y gluteos.",
+            "Evita balancearte.",
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 function isActiveSubscription(subscription: SubscriptionRow | null) {
   if (!subscription) return false;
   if (!["active", "trialing"].includes(subscription.status)) return false;
@@ -664,6 +948,52 @@ function getExerciseProgram(goal: string | null | undefined) {
   return exerciseProgramsByGoal[goal] ?? exerciseProgramsByGoal.mantener;
 }
 
+function getSupportDays(goal: string | null | undefined) {
+  if (!goal) {
+    return supportDaysByGoal.mantener;
+  }
+
+  return supportDaysByGoal[goal] ?? supportDaysByGoal.mantener;
+}
+
+function getWeekOfYear(date: Date) {
+  const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNumber = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNumber);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  return Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+function getNextMonday(from: Date) {
+  const next = new Date(from);
+  const day = next.getDay();
+  const diff = ((8 - (day || 7)) % 7) || 7;
+  next.setDate(next.getDate() + diff);
+  return next;
+}
+
+function getNextMonth(from: Date) {
+  return new Date(from.getFullYear(), from.getMonth() + 1, 1);
+}
+
+function formatShortDate(date: Date) {
+  return new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" }).format(date);
+}
+
+function buildWeeklyExerciseProgram(goal: string | null | undefined, weekIndex: number) {
+  const phase = weeklyExercisePhases[weekIndex % weeklyExercisePhases.length];
+  const combinedDays = [...getExerciseProgram(goal), ...getSupportDays(goal)];
+  const offset = weekIndex % combinedDays.length;
+  const rotatedDays = [...combinedDays.slice(offset), ...combinedDays.slice(0, offset)];
+
+  return rotatedDays.map((day, index) => ({
+    ...day,
+    dayLabel: `Dia ${index + 1}`,
+    durationMinutes: Math.max(16, day.durationMinutes + phase.durationDelta),
+    objective: `${day.objective}. ${phase.actionLabel}.`,
+  }));
+}
+
 function formatTimer(seconds: number | null) {
   if (seconds == null) return "--:--";
   const minutes = Math.floor(seconds / 60);
@@ -671,214 +1001,122 @@ function formatTimer(seconds: number | null) {
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
-function ExerciseStage({
-  caption,
-  children,
+function getExercisePhotoConfig(variant: ExerciseIllustration) {
+  switch (variant) {
+    case "bench":
+      return {
+        startHint: "Mira pecho abierto y pies firmes.",
+        endHint: "Fijate en el empuje recto y estable.",
+        startPosition: "center 18%",
+        endPosition: "center 62%",
+      };
+    case "hinge":
+      return {
+        startHint: "Empieza alto, barra pegada al cuerpo.",
+        endHint: "La cadera va atras y la espalda queda larga.",
+        startPosition: "center 12%",
+        endPosition: "center 66%",
+      };
+    case "pull":
+      return {
+        startHint: "Arranca colgado con hombros abajo.",
+        endHint: "Sube el pecho hacia la barra.",
+        startPosition: "center 14%",
+        endPosition: "center 58%",
+      };
+    case "carry":
+      return {
+        startHint: "Postura alta y abdomen firme.",
+        endHint: "Camina corto sin balancearte.",
+        startPosition: "center 20%",
+        endPosition: "center 48%",
+      };
+    case "row":
+      return {
+        startHint: "Torso inclinado y espalda neutra.",
+        endHint: "Tira codos atras hasta cerrar la espalda.",
+        startPosition: "center 24%",
+        endPosition: "center 56%",
+      };
+    case "bike":
+      return {
+        startHint: "Toma cadencia antes de acelerar.",
+        endHint: "Aprieta fuerte sin perder control.",
+        startPosition: "center 22%",
+        endPosition: "center 42%",
+      };
+    case "lunge":
+      return {
+        startHint: "Da un paso largo y mantente erguido.",
+        endHint: "Baja con control y rodillas alineadas.",
+        startPosition: "center 18%",
+        endPosition: "center 60%",
+      };
+    case "squat":
+    default:
+      return {
+        startHint: "Pecho alto, barra estable y pies firmes.",
+        endHint: "Cadera atras, rodillas alineadas y control.",
+        startPosition: "center 16%",
+        endPosition: "center 64%",
+      };
+  }
+}
+
+function ExercisePhotoStage({
+  ariaLabel,
+  hint,
+  position,
   title,
 }: {
-  caption: string;
-  children: React.ReactNode;
+  ariaLabel: string;
+  hint: string;
+  position: string;
   title: string;
 }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-background/30 p-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">{title}</div>
-      <div className="mt-2">{children}</div>
-      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{caption}</p>
+    <div className="overflow-hidden rounded-xl border border-border/60 bg-background/30">
+      <div
+        className="relative h-44 bg-cover bg-no-repeat"
+        aria-label={ariaLabel}
+        style={{
+          backgroundImage: `linear-gradient(180deg, rgba(8,10,13,0.18) 0%, rgba(8,10,13,0.62) 58%, rgba(8,10,13,0.9) 100%), url(${heroImage})`,
+          backgroundPosition: position,
+        }}
+      >
+        <div className="absolute left-3 top-3 rounded-full border border-primary/25 bg-background/75 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary backdrop-blur">
+          {title}
+        </div>
+        <div className="absolute bottom-0 left-0 right-0 p-3">
+          <div className="rounded-xl border border-white/10 bg-background/75 p-3 backdrop-blur">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Referencia visual</div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{hint}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function ExerciseCanvas({
-  children,
-  label,
-}: {
-  children: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <svg viewBox="0 0 220 140" aria-label={label} className="h-28 w-full text-primary">
-      <title>{label}</title>
-      {children}
-    </svg>
-  );
-}
-
 function ExerciseDemo({ label, variant }: { label: string; variant: ExerciseIllustration }) {
-  const line = {
-    fill: "none",
-    stroke: "currentColor",
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    strokeWidth: 5,
-  };
-  const softLine = { ...line, opacity: 0.35 };
-  const arrow = { ...line, opacity: 0.75 };
+  const photoConfig = getExercisePhotoConfig(variant);
 
-  switch (variant) {
-    case "bench":
-      return (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <ExerciseStage title="Inicio" caption="Barra arriba, escapulas atras y pies firmes en el suelo.">
-            <ExerciseCanvas label={`${label} inicio`}>
-              <path {...line} d="M22 96h168M50 96V74h70v22" />
-              <circle {...line} cx="78" cy="50" r="10" />
-              <path {...line} d="M88 58h36m-18 0v18m-34 20 10-20 24-18m0 0 24 18 8 20" />
-              <path {...line} d="M88 42h68" />
-              <path {...arrow} d="M146 30h26m-10-10 10 10-10 10" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-          <ExerciseStage title="Final" caption="Baja la barra al pecho con antebrazos rectos y vuelve a empujar.">
-            <ExerciseCanvas label={`${label} final`}>
-              <path {...line} d="M22 96h168M50 96V74h70v22" />
-              <circle {...line} cx="78" cy="50" r="10" />
-              <path {...line} d="M88 58h36m-18 0v18m-34 20 10-20 24-18m0 0 24 18 8 20" />
-              <path {...line} d="M74 66h78" />
-              <path {...arrow} d="M164 34v24m0 0-8-8m8 8 8-8" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-        </div>
-      );
-    case "hinge":
-      return (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <ExerciseStage title="Inicio" caption="De pie, barra pegada a muslos y pecho abierto.">
-            <ExerciseCanvas label={`${label} inicio`}>
-              <circle {...line} cx="94" cy="24" r="10" />
-              <path {...line} d="M94 34v34m0 0-20 18m20-18 20 18m-32-30H56m50 0h24M56 112h76" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-          <ExerciseStage title="Final" caption="Lleva la cadera atras y baja la barra rozando piernas sin curvar espalda.">
-            <ExerciseCanvas label={`${label} final`}>
-              <circle {...line} cx="86" cy="26" r="10" />
-              <path {...line} d="M86 36v24l34 8m-34-8-22 24m22-24-24 10m58-2 12 28m-30-10 18-18" />
-              <path {...line} d="M54 108h88" />
-              <path {...arrow} d="M142 24c10 16 10 40 0 58" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-        </div>
-      );
-    case "pull":
-      return (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <ExerciseStage title="Inicio" caption="Cuelga con brazos estirados y hombros abajo.">
-            <ExerciseCanvas label={`${label} inicio`}>
-              <path {...line} d="M46 18h128" />
-              <circle {...line} cx="110" cy="54" r="10" />
-              <path {...line} d="M82 18v26m56-26v26M98 64v24m24-24v24M110 64v20m0 0-18 18m18-18 18 18m-18 0-10 24m10-24 10 24" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-          <ExerciseStage title="Final" caption="Tira con codos hacia abajo hasta acercar pecho a la barra.">
-            <ExerciseCanvas label={`${label} final`}>
-              <path {...line} d="M46 18h128" />
-              <circle {...line} cx="110" cy="36" r="10" />
-              <path {...line} d="M82 18v12m56-12v12M100 46v22m20-22v22M110 46v16m0 0-18 18m18-18 18 18m-18 0-10 24m10-24 10 24" />
-              <path {...arrow} d="M158 62c-10 8-26 12-42 12" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-        </div>
-      );
-    case "carry":
-      return (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <ExerciseStage title="Postura" caption="Camina alto, abdomen firme y hombros lejos de las orejas.">
-            <ExerciseCanvas label={`${label} postura`}>
-              <circle {...line} cx="110" cy="28" r="10" />
-              <path {...line} d="M110 38v34m0 0-20 18m20-18 20 18m-28-24H78m40 0h24M78 66v36m64-36v36M66 102h24m40 0h24" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-          <ExerciseStage title="Movimiento" caption="Da pasos cortos y firmes sin balancearte hacia los lados.">
-            <ExerciseCanvas label={`${label} movimiento`}>
-              <circle {...line} cx="104" cy="28" r="10" />
-              <path {...line} d="M104 38v34m0 0-18 16m18-16 22 18m-26-22H78m40 0h24M78 68v34m64-34v34M66 102h24m40 0h24" />
-              <path {...arrow} d="M42 40h-18m0 0 10-8m-10 8 10 8M164 40h18m0 0-10-8m10 8-10 8" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-        </div>
-      );
-    case "row":
-      return (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <ExerciseStage title="Inicio" caption="Torso inclinado, espalda neutra y barra colgando debajo del pecho.">
-            <ExerciseCanvas label={`${label} inicio`}>
-              <circle {...line} cx="80" cy="26" r="10" />
-              <path {...line} d="M80 36l22 24 40 6m-40-6-24 24m24-24-30 8m72 0h22M48 112h110" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-          <ExerciseStage title="Final" caption="Lleva codos atras hasta tocar la barra cerca del abdomen.">
-            <ExerciseCanvas label={`${label} final`}>
-              <circle {...line} cx="80" cy="26" r="10" />
-              <path {...line} d="M80 36l22 24 34 2m-34-2-24 24m24-24-30 8m36-6h34" />
-              <path {...arrow} d="M152 60h24m-8-8 8 8-8 8" />
-              <path {...softLine} d="M48 112h110" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-        </div>
-      );
-    case "bike":
-      return (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <ExerciseStage title="Ritmo suave" caption="Pedalea controlado para entrar en calor y encontrar cadencia.">
-            <ExerciseCanvas label={`${label} suave`}>
-              <circle {...line} cx="62" cy="98" r="20" />
-              <circle {...line} cx="142" cy="98" r="20" />
-              <path {...line} d="M62 98l30-30 24 30H62m30-30h26m-12 0-12-18m28 18 16-14" />
-              <path {...line} d="M104 40h16m-8 0v28m0 0-22 12" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-          <ExerciseStage title="Ritmo fuerte" caption="Acelera durante el bloque intenso sin perder postura ni control.">
-            <ExerciseCanvas label={`${label} fuerte`}>
-              <circle {...line} cx="62" cy="98" r="20" />
-              <circle {...line} cx="142" cy="98" r="20" />
-              <path {...line} d="M62 98l30-30 24 30H62m30-30h26m-12 0-12-18m28 18 16-14" />
-              <path {...line} d="M104 40h16m-8 0v28m0 0-22 12" />
-              <path {...arrow} d="M170 36c12 12 14 30 2 46" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-        </div>
-      );
-    case "lunge":
-      return (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <ExerciseStage title="Inicio" caption="Da un paso amplio y mantente erguido antes de bajar.">
-            <ExerciseCanvas label={`${label} inicio`}>
-              <circle {...line} cx="90" cy="24" r="10" />
-              <path {...line} d="M90 34v30m0 0-22 20m22-20 24 18m-26-20-22 10m46 8 36 6" />
-              <path {...softLine} d="M38 112h138" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-          <ExerciseStage title="Final" caption="Baja ambas rodillas con control y empuja el suelo para volver arriba.">
-            <ExerciseCanvas label={`${label} final`}>
-              <circle {...line} cx="90" cy="24" r="10" />
-              <path {...line} d="M90 34v28l24 18m-24-18-18 26m18-26-24 10m48 8 34 6m-24 0-8 26m-24 0 12-26" />
-              <path {...arrow} d="M176 50v28m0 0-8-8m8 8 8-8" />
-              <path {...softLine} d="M38 112h138" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-        </div>
-      );
-    case "squat":
-    default:
-      return (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <ExerciseStage title="Inicio" caption="Pies firmes, pecho alto y barra estable sobre la espalda.">
-            <ExerciseCanvas label={`${label} inicio`}>
-              <circle {...line} cx="94" cy="24" r="10" />
-              <path {...line} d="M54 42h80m-40 0v26m0 0-20 18m20-18 22 18m-24-20-22-8m22 8 18-8m-40 44 18-24m22 0 18 24" />
-              <path {...softLine} d="M48 112h92" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-          <ExerciseStage title="Final" caption="Cadera atras, rodillas alineadas y baja con control hasta la profundidad segura.">
-            <ExerciseCanvas label={`${label} final`}>
-              <circle {...line} cx="94" cy="22" r="10" />
-              <path {...line} d="M54 40h80m-40 0v20l-16 12m16-12 20 14m-18-14-18-8m18 8 16-6m-38 50 18-22m18-2 18 24" />
-              <path {...arrow} d="M164 34v28m0 0-8-8m8 8 8-8" />
-              <path {...softLine} d="M48 112h92" />
-            </ExerciseCanvas>
-          </ExerciseStage>
-        </div>
-      );
-  }
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <ExercisePhotoStage
+        ariaLabel={`${label} foto real`}
+        title="Foto real"
+        hint={photoConfig.startHint}
+        position={photoConfig.startPosition}
+      />
+      <ExercisePhotoStage
+        ariaLabel={`${label} punto clave`}
+        title="Punto clave"
+        hint={photoConfig.endHint}
+        position={photoConfig.endPosition}
+      />
+    </div>
+  );
 }
 
 export default function Dashboard() {
@@ -982,7 +1220,14 @@ export default function Dashboard() {
   const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
   const activePlan = activeTab === "dieta" ? dietPlan : activeTab === "rutina" ? workoutPlan : null;
   const dailyTargets = useMemo(() => estimateDailyTargets(profile), [profile]);
-  const exerciseProgram = useMemo(() => getExerciseProgram(profile?.goal), [profile?.goal]);
+  const currentWeekIndex = useMemo(() => getWeekOfYear(new Date()) % weeklyExercisePhases.length, []);
+  const currentExercisePhase = weeklyExercisePhases[currentWeekIndex];
+  const nextWeeklyRefresh = useMemo(() => getNextMonday(new Date()), []);
+  const nextMonthlyRefresh = useMemo(() => getNextMonth(new Date()), []);
+  const exerciseProgram = useMemo(
+    () => buildWeeklyExerciseProgram(profile?.goal, currentWeekIndex),
+    [currentWeekIndex, profile?.goal],
+  );
   const todayNutrition = useMemo(() => {
     const todayLogs = nutritionLogs.filter((log) => isToday(log.eaten_at));
 
@@ -1015,10 +1260,10 @@ export default function Dashboard() {
   const activeExerciseDay = exerciseProgram[selectedExerciseDay] ?? exerciseProgram[0] ?? null;
   const monthlyValueHooks = useMemo(() => [
     `Reajuste mensual para ${goalLabel(profile?.goal)} segun progreso real`,
-    "Rotacion de ejercicios para evitar estancarte y mantener motivacion",
+    `Rotacion semanal activa: ${currentExercisePhase.title.toLowerCase()}`,
     dailyTargets ? `Objetivos diarios recalculados alrededor de ${formatNumber(dailyTargets.calories)} kcal` : "Objetivos diarios recalculados segun tu etapa actual",
-    "Seguimiento nutricional, consultas y check-ins que justifican la renovacion",
-  ], [dailyTargets, profile?.goal]);
+    currentExercisePhase.monthlyHook,
+  ], [currentExercisePhase.monthlyHook, currentExercisePhase.title, dailyTargets, profile?.goal]);
 
   useEffect(() => {
     setSelectedExerciseDay(0);
@@ -1894,9 +2139,17 @@ export default function Dashboard() {
                   <div>
                     <h2 className="font-display text-xl font-bold">Tu semana de ejercicios IA</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Recomendado para {goalLabel(profile?.goal)} con dias listos para ejecutar.
+                      Recomendado para {goalLabel(profile?.goal)} con una semana viva de {exerciseProgram.length} dias.
                     </p>
                   </div>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Actualizacion semanal</div>
+                  <div className="mt-2 text-lg font-bold">{currentExercisePhase.title}</div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Cambia automaticamente el {formatShortDate(nextWeeklyRefresh)} para que el cliente no sienta contenido congelado.
+                  </p>
                 </div>
 
                 <div className="mt-5 space-y-3">
@@ -1926,11 +2179,19 @@ export default function Dashboard() {
                     <Sparkles className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h2 className="font-display text-xl font-bold">Por que este premium se siente real</h2>
+                    <h2 className="font-display text-xl font-bold">Actualizaciones que justifican renovar</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Cada mes cambia contigo, no se queda congelado.
+                      Cada semana rota el enfoque y cada mes se refresca el contenido.
                     </p>
                   </div>
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-border/60 bg-background/20 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">Actualizacion mensual</div>
+                  <div className="mt-2 text-base font-semibold">Nuevo bloque premium desde {formatShortDate(nextMonthlyRefresh)}</div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Se reajustan mensajes, foco semanal y tareas para que el plan siga pareciendo necesario.
+                  </p>
                 </div>
 
                 <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
@@ -1958,7 +2219,7 @@ export default function Dashboard() {
                     </div>
                     <h2 className="mt-4 font-display text-2xl font-bold">{activeExerciseDay.focus}</h2>
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      {activeExerciseDay.objective}. Tu coach IA te deja el bloque listo para empezar ahora.
+                      {activeExerciseDay.objective}. Esta semana estas en {currentExercisePhase.actionLabel.toLowerCase()} y el bloque se refresca automaticamente.
                     </p>
 
                     <div className="mt-5 grid gap-3 sm:grid-cols-3">
