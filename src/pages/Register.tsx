@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Dumbbell, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dumbbell, Eye, EyeOff, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { startCheckout } from "@/lib/checkout";
 
 export default function Register() {
@@ -16,10 +16,12 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const checkoutIntent = searchParams.get("checkout") === "1";
 
-  const update = (field: string, value: string) => setForm((f) => ({ ...f, [field]: value }));
+  const update = (field: string, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoading(true);
 
     const { data, error } = await supabase.auth.signUp({
@@ -33,7 +35,11 @@ export default function Register() {
 
     if (error) {
       setLoading(false);
-      toast({ title: "Error al crear cuenta", description: error.message, variant: "destructive" });
+      toast({
+        title: "Error al crear cuenta",
+        description: error.message,
+        variant: "destructive",
+      });
       return;
     }
 
@@ -49,7 +55,11 @@ export default function Register() {
         return;
       } catch (checkoutError: any) {
         setLoading(false);
-        toast({ title: "No se pudo iniciar el pago", description: checkoutError.message ?? "Error inesperado", variant: "destructive" });
+        toast({
+          title: "No se pudo iniciar el pago",
+          description: checkoutError.message ?? "Error inesperado",
+          variant: "destructive",
+        });
         navigate("/failed");
         return;
       }
@@ -60,13 +70,16 @@ export default function Register() {
     if (checkoutIntent) {
       toast({
         title: "Cuenta creada",
-        description: "Inicia sesiÃ³n para continuar con el checkout premium.",
+        description: "Inicia sesion para continuar con el checkout premium.",
       });
       navigate("/login?checkout=1");
       return;
     }
 
-    toast({ title: "Â¡Cuenta creada!", description: "Revisa tu email para confirmar tu cuenta." });
+    toast({
+      title: "Cuenta creada",
+      description: "Revisa tu email para confirmar tu cuenta.",
+    });
     navigate("/login");
   };
 
@@ -82,35 +95,73 @@ export default function Register() {
         <div className="glass-card rounded-2xl p-8">
           <h1 className="mb-1 font-display text-2xl font-bold">Crear cuenta</h1>
           <p className="mb-6 text-sm text-muted-foreground">
-            {checkoutIntent ? "Crea tu cuenta para activar el premium y seguir al pago" : "Comienza tu transformaciÃ³n hoy"}
+            {checkoutIntent ? "Crea tu cuenta para activar el premium y seguir al pago" : "Comienza tu transformacion hoy"}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Nombre</Label>
-              <Input id="name" placeholder="Tu nombre" value={form.name} onChange={(e) => update("name", e.target.value)} required className="bg-background/50" />
+              <Input
+                id="name"
+                placeholder="Tu nombre"
+                value={form.name}
+                onChange={(event) => update("name", event.target.value)}
+                required
+                className="bg-background/50"
+              />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="tu@email.com" value={form.email} onChange={(e) => update("email", e.target.value)} required className="bg-background/50" />
+              <Input
+                id="email"
+                type="email"
+                placeholder="tu@email.com"
+                value={form.email}
+                onChange={(event) => update("email", event.target.value)}
+                required
+                className="bg-background/50"
+              />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="password">ContraseÃ±a</Label>
+              <Label htmlFor="password">Contrasena</Label>
               <div className="relative">
-                <Input id="password" type={showPassword ? "text" : "password"} placeholder="MÃ­nimo 6 caracteres" value={form.password} onChange={(e) => update("password", e.target.value)} required minLength={6} className="bg-background/50 pr-10" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Minimo 6 caracteres"
+                  value={form.password}
+                  onChange={(event) => update("password", event.target.value)}
+                  required
+                  minLength={6}
+                  className="bg-background/50 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
+
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
-              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creando...</> : checkoutIntent ? "Crear cuenta y seguir" : "Crear cuenta"}
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creando...
+                </>
+              ) : checkoutIntent ? "Crear cuenta y seguir" : "Crear cuenta"}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Â¿Ya tienes cuenta?{" "}
-            <Link to={checkoutIntent ? "/login?checkout=1" : "/login"} className="font-medium text-primary hover:underline">Inicia sesiÃ³n</Link>
+            Ya tienes cuenta?{" "}
+            <Link to={checkoutIntent ? "/login?checkout=1" : "/login"} className="font-medium text-primary hover:underline">
+              Inicia sesion
+            </Link>
           </p>
         </div>
       </div>
