@@ -1,14 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "../_shared/cors.ts";
+import { invokeGeminiJson } from "../_shared/gemini.ts";
+import { requireUser } from "../_shared/supabase.ts";
 
 type PremiumPlan = {
   closing: string;
+  coach_notes?: string[];
+  highlights?: string[];
   intro: string;
   sections: Array<{
     bullets: string[];
@@ -40,11 +38,21 @@ Responde SOLO con JSON valido:
   "title": "string",
   "subtitle": "string",
   "intro": "string",
+  "highlights": ["string", "string", "string"],
   "sections": [{ "title": "string", "bullets": ["string"] }],
+  "coach_notes": ["string", "string", "string"],
   "closing": "string"
 }
 
-Genera un plan de alimentacion premium, claro y accionable.`;
+Genera un plan de alimentacion premium, claro y accionable.
+Incluye:
+- objetivo calorico
+- distribucion de macronutrientes
+- comidas recomendadas
+- consejos de adherencia
+- accion practica para hoy
+
+No uses markdown, ni asteriscos, ni emojis.`;
   }
 
   return `Eres un entrenador personal premium para una app fitness en espanol.
@@ -57,11 +65,21 @@ Responde SOLO con JSON valido:
   "title": "string",
   "subtitle": "string",
   "intro": "string",
+  "highlights": ["string", "string", "string"],
   "sections": [{ "title": "string", "bullets": ["string"] }],
+  "coach_notes": ["string", "string", "string"],
   "closing": "string"
 }
 
-Genera una rutina premium, clara y accionable.`;
+Genera una rutina premium, clara y accionable.
+Incluye:
+- enfoque semanal
+- dias de entrenamiento
+- ejercicios clave
+- series y repeticiones
+- recomendaciones de tecnica y descanso
+
+No uses markdown, ni asteriscos, ni emojis.`;
 }
 
 serve(async (req) => {
@@ -70,21 +88,7 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header");
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) throw new Error("No autenticado");
+    const { supabase, user } = await requireUser(req);
 
     const { planType } = await req.json() as { planType?: "dieta" | "rutina" };
     if (!planType || !["dieta", "rutina"].includes(planType)) {
@@ -101,46 +105,7 @@ serve(async (req) => {
       throw new Error("Perfil fitness no encontrado");
     }
 
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-    console.log("backend gemini loaded?", !!geminiApiKey);
-    if (!geminiApiKey) throw new Error("Missing Gemini API key");
-
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": geminiApiKey,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: buildPrompt(planType, profile) }],
-            },
-          ],
-          generationConfig: {
-            responseMimeType: "application/json",
-          },
-        }),
-      },
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("Gemini edge error", response.status, text);
-      throw new Error("Error generando contenido con Gemini");
-    }
-
-    const payload = await response.json();
-    const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) {
-      console.error("Gemini edge payload invalido", payload);
-      throw new Error("Gemini no devolvio texto");
-    }
-
-    const result = JSON.parse(text) as PremiumPlan;
+    const result = await invokeGeminiJson<PremiumPlan>(buildPrompt(planType, profile));
 
     return new Response(JSON.stringify({ result }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

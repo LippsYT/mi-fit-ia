@@ -10,10 +10,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import {
-  answerNutritionConsultation,
-  estimateDailyNutrition,
   normalizePlanForStorage,
   normalizePremiumPlan,
+  type DailyNutritionAnalysis,
   type DailyMealInput,
   type FitnessProfile,
   type NutritionConsultation,
@@ -632,8 +631,25 @@ export default function Dashboard() {
     setMealSaving(true);
 
     try {
-      const analysis = await estimateDailyNutrition(meals, profile, dailyTargets);
-      const rows = analysis.meals.map((meal) => ({
+      const { data: analysis, error: analysisError } = await supabase.functions.invoke("analyze-meals", {
+        body: {
+          meals,
+          profile,
+          targets: dailyTargets,
+        },
+      });
+
+      if (analysisError) {
+        console.error("Error invocando analyze-meals", analysisError);
+        throw new Error(analysisError.message || "No se pudo analizar el dia desde el backend");
+      }
+
+      if (!analysis) {
+        throw new Error("La funcion analyze-meals no devolvio contenido valido");
+      }
+
+      const parsedAnalysis = analysis as DailyNutritionAnalysis;
+      const rows = parsedAnalysis.meals.map((meal) => ({
         user_id: user.id,
         meal_name: mealLabel(meal.meal_type),
         meal_type: meal.meal_type,
@@ -659,12 +675,12 @@ export default function Dashboard() {
         user_id: user.id,
         consultation_type: "nutrition_feedback",
         question: "Feedback nutricional del dia",
-        answer: analysis.coach_message,
-        action_steps: analysis.improve,
+        answer: parsedAnalysis.coach_message,
+        action_steps: parsedAnalysis.improve,
         context_payload: {
-          next_meal: analysis.next_meal,
-          strengths: analysis.strengths,
-          totals: analysis.totals,
+          next_meal: parsedAnalysis.next_meal,
+          strengths: parsedAnalysis.strengths,
+          totals: parsedAnalysis.totals,
         },
       };
 
@@ -811,18 +827,31 @@ export default function Dashboard() {
         latestCheckin?.weight ? `Ultimo peso ${latestCheckin.weight} kg` : "",
       ].filter(Boolean).join(" | ");
 
-      const consultation: NutritionConsultation = await answerNutritionConsultation(
-        consultationQuestion,
-        profile,
-        contextSummary,
-      );
+      const { data: consultation, error: consultationError } = await supabase.functions.invoke("ask-coach", {
+        body: {
+          question: consultationQuestion,
+          profile,
+          contextSummary,
+        },
+      });
+
+      if (consultationError) {
+        console.error("Error invocando ask-coach", consultationError);
+        throw new Error(consultationError.message || "No se pudo consultar al coach desde el backend");
+      }
+
+      if (!consultation) {
+        throw new Error("La funcion ask-coach no devolvio contenido valido");
+      }
+
+      const parsedConsultation = consultation as NutritionConsultation;
 
       const payload = {
         user_id: user.id,
         consultation_type: "quick_question",
         question: consultationQuestion.trim(),
-        answer: consultation.answer,
-        action_steps: consultation.action_steps,
+        answer: parsedConsultation.answer,
+        action_steps: parsedConsultation.action_steps,
         context_payload: {},
       };
 
