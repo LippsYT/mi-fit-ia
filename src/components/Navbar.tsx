@@ -25,8 +25,8 @@ export default function Navbar() {
               <Link to="/login">
                 <Button variant="ghost" size="sm">Iniciar sesión</Button>
               </Link>
-              <Link to="/registro">
-                <Button size="sm">Empezar ahora</Button>
+              <Link to="/registro?checkout=1">
+                <Button size="sm">Activar oferta</Button>
               </Link>
             </>
           )}

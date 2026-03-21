@@ -122,6 +122,13 @@ type DailyTargets = {
   steps: number;
 };
 
+type ExerciseSpotlight = {
+  cadence: string;
+  focus: string;
+  name: string;
+  reason: string;
+};
+
 const previewSections = 2;
 
 const initialMealForm: MealFormState = {
@@ -151,6 +158,27 @@ const initialDailyMealForm: DailyMealFormState = {
 const edgeFunctionsUrl = import.meta.env.VITE_SUPABASE_URL;
 const edgeFunctionsKey =
   import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+const exerciseSpotlightsByGoal: Record<string, ExerciseSpotlight[]> = {
+  bajar_grasa: [
+    { name: "Sentadilla goblet", focus: "Gasto energetico + piernas", reason: "Te obliga a mover mucho musculo y sostener buena tecnica incluso en deficit.", cadence: "2 veces por semana" },
+    { name: "Zancadas caminando", focus: "Piernas + estabilidad", reason: "Suben la exigencia cardiovascular sin perder trabajo de fuerza real.", cadence: "1 a 2 bloques por semana" },
+    { name: "Remo con mancuerna", focus: "Espalda + postura", reason: "Te ayuda a mantener masa muscular mientras bajas grasa.", cadence: "2 sesiones por semana" },
+    { name: "Intervalos en bici o cinta", focus: "Condicionamiento", reason: "Dan un plus de gasto sin destruir la recuperacion de fuerza.", cadence: "1 a 2 cierres semanales" },
+  ],
+  ganar_musculo: [
+    { name: "Sentadilla trasera", focus: "Base de masa muscular", reason: "Es uno de los ejercicios que mas retorno te da para construir piernas y gluteos.", cadence: "2 veces por semana" },
+    { name: "Press banca", focus: "Pecho + triceps", reason: "Te permite progresar con cargas y medir avance mes a mes.", cadence: "1 a 2 sesiones por semana" },
+    { name: "Peso muerto rumano", focus: "Femoral + gluteo", reason: "Suma masa atras de la pierna y mejora la calidad del patron de bisagra.", cadence: "1 a 2 sesiones por semana" },
+    { name: "Remo con barra", focus: "Espalda densa", reason: "Compensa el trabajo de empuje y mejora la apariencia global del torso.", cadence: "2 sesiones por semana" },
+  ],
+  mantener: [
+    { name: "Sentadilla frontal", focus: "Piernas + core", reason: "Mantiene fuerza y tecnica con menos desgaste total.", cadence: "1 o 2 veces por semana" },
+    { name: "Press inclinado", focus: "Torso superior", reason: "Te deja sostener musculatura y calidad de empuje sin sobrecargar demasiado.", cadence: "1 a 2 sesiones por semana" },
+    { name: "Dominadas asistidas o jalon", focus: "Espalda funcional", reason: "Mantiene la espalda activa y estable con volumen controlado.", cadence: "2 sesiones por semana" },
+    { name: "Farmer walk o carries", focus: "Core + agarre", reason: "Aporta condicion fisica util y sensacion atletica real.", cadence: "Como final de sesion" },
+  ],
+};
 
 function isActiveSubscription(subscription: SubscriptionRow | null) {
   if (!subscription) return false;
@@ -256,6 +284,25 @@ function mealLabel(value: string) {
   }
 }
 
+function goalLabel(goal: string | null | undefined) {
+  switch (goal) {
+    case "bajar_grasa":
+      return "bajar grasa";
+    case "ganar_musculo":
+      return "ganar musculo";
+    default:
+      return "mantenerte en forma";
+  }
+}
+
+function getExerciseSpotlights(goal: string | null | undefined) {
+  if (!goal) {
+    return exerciseSpotlightsByGoal.mantener;
+  }
+
+  return exerciseSpotlightsByGoal[goal] ?? exerciseSpotlightsByGoal.mantener;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { loading: authLoading, session, signOut, user } = useAuth();
@@ -354,6 +401,7 @@ export default function Dashboard() {
   const hasPremiumAccess = useMemo(() => isActiveSubscription(subscription), [subscription]);
   const activePlan = activeTab === "dieta" ? dietPlan : workoutPlan;
   const dailyTargets = useMemo(() => estimateDailyTargets(profile), [profile]);
+  const exerciseSpotlights = useMemo(() => getExerciseSpotlights(profile?.goal), [profile?.goal]);
   const todayNutrition = useMemo(() => {
     const todayLogs = nutritionLogs.filter((log) => isToday(log.eaten_at));
 
@@ -383,6 +431,12 @@ export default function Dashboard() {
         .map((item) => [item.workout_day, item]),
     );
   }, [workoutPlan?.id, workoutProgress]);
+  const monthlyValueHooks = useMemo(() => [
+    `Reajuste mensual para ${goalLabel(profile?.goal)} segun progreso real`,
+    "Rotacion de ejercicios para evitar estancarte y mantener motivacion",
+    dailyTargets ? `Objetivos diarios recalculados alrededor de ${formatNumber(dailyTargets.calories)} kcal` : "Objetivos diarios recalculados segun tu etapa actual",
+    "Seguimiento nutricional, consultas y check-ins que justifican la renovacion",
+  ], [dailyTargets, profile?.goal]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -1167,7 +1221,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="mb-6 flex gap-2">
+        <div className="mb-6 flex flex-wrap items-center gap-2">
           <Button variant={activeTab === "dieta" ? "default" : "secondary"} onClick={() => setActiveTab("dieta")} size="sm">
             <Utensils className="mr-1 h-4 w-4" />
             Plan de dieta
@@ -1176,7 +1230,67 @@ export default function Dashboard() {
             <Calendar className="mr-1 h-4 w-4" />
             Rutina semanal
           </Button>
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+            <Bot className="h-3.5 w-3.5" />
+            Ejercicios IA premium
+          </div>
         </div>
+
+        {hasPremiumAccess && (
+          <div className="mb-8 grid gap-6 xl:grid-cols-[1.35fr,1fr]">
+            <div className="glass-card rounded-2xl p-6">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-primary/10 p-2">
+                  <Target className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-display text-xl font-bold">Ejercicios recomendados por tu coach IA</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Priorizados para {goalLabel(profile?.goal)} y para que sientas avance real en cada mes premium.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                {exerciseSpotlights.map((exercise) => (
+                  <div key={exercise.name} className="rounded-xl border border-border/60 bg-background/20 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-display text-lg font-semibold">{exercise.name}</h3>
+                      <span className="rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                        {exercise.cadence}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm font-medium text-foreground/90">{exercise.focus}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{exercise.reason}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="glass-card rounded-2xl p-6">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-primary/10 p-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-display text-xl font-bold">Lo que hace valioso cada mes premium</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    La renovacion se justifica cuando el plan se sigue moviendo contigo.
+                  </p>
+                </div>
+              </div>
+
+              <ul className="mt-5 space-y-3 text-sm text-muted-foreground">
+                {monthlyValueHooks.map((item) => (
+                  <li key={item} className="flex gap-3 rounded-xl border border-border/60 bg-background/20 p-4">
+                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
