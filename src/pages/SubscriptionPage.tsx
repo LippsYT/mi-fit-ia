@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Crown, Loader2, ShieldCheck, Sparkles, TrendingUp, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAccessStatus } from "@/hooks/useAccessStatus";
@@ -17,20 +17,22 @@ const premiumBenefits = [
 
 export default function SubscriptionPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { session, user } = useAuth();
   const { hasActiveSubscription, loading, onboardingCompleted } = useAccessStatus();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const fromOnboarding = searchParams.get("fromOnboarding") === "1";
 
   useEffect(() => {
     if (loading) return;
-    if (!onboardingCompleted) {
+    if (!onboardingCompleted && !fromOnboarding) {
       navigate("/formulario", { replace: true });
       return;
     }
     if (hasActiveSubscription) {
       navigate("/dashboard", { replace: true });
     }
-  }, [hasActiveSubscription, loading, navigate, onboardingCompleted]);
+  }, [fromOnboarding, hasActiveSubscription, loading, navigate, onboardingCompleted]);
 
   const handleSubscribe = async () => {
     if (!session?.access_token || !user?.email) {

@@ -31,7 +31,7 @@ const App = () => (
           <Route path="/registro" element={<Register />} />
           <Route path="/register" element={<Register />} />
           <Route path="/formulario" element={<ProtectedRoute><OnboardingForm /></ProtectedRoute>} />
-          <Route path="/suscripcion" element={<ProtectedRoute requireOnboarding><SubscriptionPage /></ProtectedRoute>} />
+          <Route path="/suscripcion" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute requireOnboarding requireSubscription><Dashboard /></ProtectedRoute>} />
           <Route path="/success" element={<SuccessPage />} />
           <Route path="/cancel" element={<CancelPage />} />

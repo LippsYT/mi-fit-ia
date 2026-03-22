@@ -328,7 +328,7 @@ export default function OnboardingForm() {
         : "Tu perfil premium ya quedo listo. Solo falta activar tu acceso.",
     });
 
-    navigate(hasActiveSubscription ? "/dashboard" : "/suscripcion", { replace: true });
+    navigate(hasActiveSubscription ? "/dashboard" : "/suscripcion?fromOnboarding=1", { replace: true });
   };
 
   if (authLoading || loadingProfile) {
