@@ -212,8 +212,8 @@ export default function OnboardingForm() {
       ["full_name", "gender", "age"],
       ["height", "weight", "target_weight", "goal"],
       ["activity_level", "experience_level", "training_days", "training_type"],
-      ["food_budget", "cooking_time"],
-      ["country", "cuisine_style"],
+      [],
+      ["food_budget", "cooking_time", "country", "cuisine_style"],
       [],
     ];
 
