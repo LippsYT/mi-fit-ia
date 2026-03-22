@@ -3,9 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { Brain, CalendarDays, Crown, Lock, Smartphone, TrendingUp, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useScrollReveal } from "@/hooks/use-scroll-reveal";
+import { useAccessStatus } from "@/hooks/useAccessStatus";
 import { useAuth } from "@/hooks/useAuth";
-import { toast } from "@/hooks/use-toast";
-import { startCheckout } from "@/lib/checkout";
 import heroImage from "@/assets/hero-fitness.jpg";
 import Navbar from "@/components/Navbar";
 
@@ -16,8 +15,8 @@ function OfferTicker() {
     "OFERTA POR TIEMPO LIMITADO",
     "ANTES AR$ 35.000",
     "HOY AR$ 11.499/MES",
-    "DIETA + RUTINA + EJERCICIOS IA + SEGUIMIENTO PREMIUM",
-    "CANCELA CUANDO QUIERAS",
+    "SISTEMA DE NUTRICION + ENTRENAMIENTO + IA",
+    "AJUSTE SEMANAL Y BLOQUE MENSUAL",
   ];
 
   return (
@@ -36,7 +35,15 @@ function OfferTicker() {
   );
 }
 
-function HeroSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart: StartOfferHandler }) {
+function HeroSection({
+  ctaLoading,
+  ctaLabel,
+  onStart,
+}: {
+  ctaLoading: boolean;
+  ctaLabel: string;
+  onStart: StartOfferHandler;
+}) {
   const ref = useScrollReveal();
 
   return (
@@ -60,19 +67,19 @@ function HeroSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart: St
             data-reveal
             className="mb-6 font-display text-4xl font-bold leading-[1.02] tracking-tight opacity-0 sm:text-5xl lg:text-6xl"
           >
-            Tu plan fitness personalizado <span className="text-gradient">para pagar, usar y renovar con sentido</span>
+            No es una dieta. <span className="text-gradient">Es un sistema que se adapta a vos y te lleva al resultado.</span>
           </h1>
 
           <p data-reveal className="mb-8 max-w-2xl text-lg leading-relaxed text-muted-foreground opacity-0">
-            Dieta, rutina, ejercicios recomendados por IA, seguimiento nutricional, check-ins y ajustes mensuales segun tu objetivo.
-            Todo en una sola membresia premium pensada para que el cliente sienta valor real cada mes.
+            Organiza lo que comes, lo que entrenas y lo que ajustas cada semana. El usuario paga por claridad, acompanamiento
+            y progreso visible, no por consejos sueltos.
           </p>
 
           <div data-reveal className="mb-6 flex flex-col gap-3 opacity-0 sm:flex-row">
             <Button variant="hero" size="xl" onClick={() => void onStart()} disabled={ctaLoading}>
-              {ctaLoading ? "Redirigiendo..." : "Empezar ahora"}
+              {ctaLoading ? "Cargando..." : ctaLabel}
             </Button>
-            <Link to="/login?checkout=1">
+            <Link to="/login">
               <Button variant="outline" size="xl">Ya tengo cuenta</Button>
             </Link>
           </div>
@@ -99,7 +106,7 @@ function HeroSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart: St
             </div>
             <div>
               <span className="block font-display text-2xl font-bold text-foreground tabular-nums">12x</span>
-              ajustes al año
+              ajustes al ano
             </div>
           </div>
         </div>
@@ -109,10 +116,10 @@ function HeroSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart: St
 }
 
 const features = [
-  { icon: Brain, title: "Dieta con IA", desc: "Nutricion guiada segun tu perfil, objetivo y comidas reales del dia." },
-  { icon: CalendarDays, title: "Rutina semanal", desc: "Plan semanal que cambia segun tu disponibilidad y enfoque del mes." },
-  { icon: TrendingUp, title: "Ejercicios por objetivo", desc: "Recomendaciones distintas para bajar grasa, ganar musculo o mantener." },
-  { icon: Smartphone, title: "Seguimiento premium", desc: "Check-ins, calorias, macros y feedback para que el pago se sienta util." },
+  { icon: Brain, title: "Nutricion dinamica", desc: "Plan diario ajustable con IA, alternativas y decisiones utiles para vida real." },
+  { icon: CalendarDays, title: "Rutina viva", desc: "Semana de entrenamiento conectada con tu objetivo, cumplimiento y energia." },
+  { icon: TrendingUp, title: "Progreso visible", desc: "Peso, adherencia, rachas, check-ins y evolucion clara para sostener la suscripcion." },
+  { icon: Smartphone, title: "Acompanamiento diario", desc: "Dashboard, feedback, chat accionable y sistema que no te deja improvisar." },
 ];
 
 function FeaturesSection() {
@@ -126,7 +133,8 @@ function FeaturesSection() {
             Una membresia que el cliente <span className="text-gradient">quiere renovar</span>
           </h2>
           <p data-reveal className="mx-auto max-w-2xl text-muted-foreground opacity-0">
-            El valor no esta solo en un texto generado. Esta en sentir cada semana que el plan se mueve con el cuerpo, el objetivo y el progreso real.
+            El valor no esta en leer un plan una vez. El valor esta en tener un sistema que organiza el dia, ajusta la semana y
+            evita arrancar de cero cada mes.
           </p>
         </div>
 
@@ -150,7 +158,15 @@ function FeaturesSection() {
   );
 }
 
-function PricingSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart: StartOfferHandler }) {
+function PricingSection({
+  ctaLoading,
+  ctaLabel,
+  onStart,
+}: {
+  ctaLoading: boolean;
+  ctaLabel: string;
+  onStart: StartOfferHandler;
+}) {
   const ref = useScrollReveal();
 
   return (
@@ -161,7 +177,7 @@ function PricingSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart:
             Oferta premium de lanzamiento
           </h2>
           <p data-reveal className="mb-12 text-muted-foreground opacity-0">
-            Pensado para vender una suscripcion que el cliente perciba necesaria mes a mes.
+            Primero perfilamos al usuario. Despues activa la membresia y entra al sistema completo.
           </p>
 
           <div data-reveal className="glass-card glow-primary rounded-2xl p-8 opacity-0">
@@ -174,11 +190,11 @@ function PricingSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart:
 
             <ul className="mb-8 space-y-3 text-left text-sm">
               {[
-                "Dieta premium con seguimiento nutricional real",
-                "Rutina semanal con ejercicios recomendados por objetivo",
-                "Ajuste mensual para evitar estancamiento",
-                "Consultas rapidas y feedback IA 24/7",
-                "Check-ins para sentir avance, no solo leer consejos",
+                "Onboarding premium con perfilado completo",
+                "Nutricion y entrenamiento conectados entre si",
+                "Ajuste semanal obligatorio segun resultados",
+                "Dashboard diario con progreso y adherencia",
+                "Chat IA util para resolver la vida real",
               ].map((item) => (
                 <li key={item} className="flex items-center gap-3">
                   <Zap className="h-4 w-4 shrink-0 text-primary" />
@@ -188,11 +204,11 @@ function PricingSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart:
             </ul>
 
             <Button variant="hero" size="lg" className="w-full" onClick={() => void onStart()} disabled={ctaLoading}>
-              {ctaLoading ? "Redirigiendo..." : "Activar oferta ahora"}
+              {ctaLoading ? "Cargando..." : ctaLabel}
             </Button>
 
             <p className="mt-4 text-xs text-muted-foreground">
-              Sin plan gratis desde la landing principal. Entras para activar la oferta y convertir.
+              Sin plan gratuito y sin version limitada. El acceso completo se activa con suscripcion.
             </p>
           </div>
         </div>
@@ -201,7 +217,15 @@ function PricingSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart:
   );
 }
 
-function CtaSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart: StartOfferHandler }) {
+function CtaSection({
+  ctaLoading,
+  ctaLabel,
+  onStart,
+}: {
+  ctaLoading: boolean;
+  ctaLabel: string;
+  onStart: StartOfferHandler;
+}) {
   const ref = useScrollReveal();
 
   return (
@@ -209,14 +233,15 @@ function CtaSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart: Sta
       <div className="container mx-auto section-padding text-center">
         <Lock data-reveal className="mx-auto mb-6 h-10 w-10 text-primary opacity-0" />
         <h2 data-reveal className="mb-4 font-display text-3xl font-bold tracking-tight opacity-0 sm:text-4xl">
-          Haz que el cliente sienta que dejar de pagar es perder progreso
+          Deja de empezar de cero cada semana
         </h2>
         <p data-reveal className="mx-auto mb-8 max-w-2xl text-muted-foreground opacity-0">
-          Cada mes recibe nuevos ajustes, ejercicios priorizados para su objetivo, seguimiento diario y decisiones mas precisas. Esa continuidad es el verdadero producto.
+          Este sistema se adapta a vos, organiza tus decisiones y convierte el progreso en algo visible. Eso es lo que hace
+          dificil abandonar la suscripcion.
         </p>
         <div data-reveal className="opacity-0">
           <Button variant="hero" size="xl" onClick={() => void onStart()} disabled={ctaLoading}>
-            {ctaLoading ? "Redirigiendo..." : "Activar premium por AR$ 11.499/mes"}
+            {ctaLoading ? "Cargando..." : ctaLabel}
           </Button>
         </div>
       </div>
@@ -226,45 +251,53 @@ function CtaSection({ ctaLoading, onStart }: { ctaLoading: boolean; onStart: Sta
 
 export default function Landing() {
   const navigate = useNavigate();
-  const { session, user } = useAuth();
+  const { user } = useAuth();
+  const { hasActiveSubscription, loading: accessLoading, onboardingCompleted } = useAccessStatus();
   const [ctaLoading, setCtaLoading] = useState(false);
 
   const handleStartOffer = async () => {
-    if (!session?.access_token || !user?.email) {
-      navigate("/registro?checkout=1");
-      return;
-    }
-
     setCtaLoading(true);
 
     try {
-      const url = await startCheckout({
-        accessToken: session.access_token,
-        email: user.email,
-        userId: user.id,
-      });
+      if (!user) {
+        navigate("/registro");
+        return;
+      }
 
-      window.location.href = url;
-    } catch (error: any) {
-      toast({
-        title: "No se pudo iniciar el pago",
-        description: error.message ?? "Error inesperado",
-        variant: "destructive",
-      });
-      navigate("/failed");
+      if (!onboardingCompleted) {
+        navigate("/formulario");
+        return;
+      }
+
+      if (!hasActiveSubscription) {
+        navigate("/suscripcion");
+        return;
+      }
+
+      navigate("/dashboard");
     } finally {
       setCtaLoading(false);
     }
   };
 
+  const actionLabel = !user
+    ? "Empezar ahora"
+    : accessLoading
+      ? "Cargando..."
+      : !onboardingCompleted
+        ? "Completar onboarding"
+        : !hasActiveSubscription
+          ? "Activar suscripcion"
+          : "Ir a mi sistema";
+
   return (
     <div className="min-h-screen">
       <Navbar />
       <OfferTicker />
-      <HeroSection ctaLoading={ctaLoading} onStart={handleStartOffer} />
+      <HeroSection ctaLoading={ctaLoading || accessLoading} ctaLabel={actionLabel} onStart={handleStartOffer} />
       <FeaturesSection />
-      <PricingSection ctaLoading={ctaLoading} onStart={handleStartOffer} />
-      <CtaSection ctaLoading={ctaLoading} onStart={handleStartOffer} />
+      <PricingSection ctaLoading={ctaLoading || accessLoading} ctaLabel={actionLabel} onStart={handleStartOffer} />
+      <CtaSection ctaLoading={ctaLoading || accessLoading} ctaLabel={actionLabel} onStart={handleStartOffer} />
       <footer className="border-t border-border/30 py-8 text-center text-sm text-muted-foreground section-padding">
         {"\u00A9"} 2026 FIT AI SYSTEM. Todos los derechos reservados.
       </footer>

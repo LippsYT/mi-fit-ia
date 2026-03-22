@@ -1,21 +1,25 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Dumbbell, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { startCheckout } from "@/lib/checkout";
+
+function isActiveSubscription(subscription: { current_period_end?: string | null; status?: string | null } | null) {
+  if (!subscription) return false;
+  if (!subscription.status || !["active", "trialing"].includes(subscription.status)) return false;
+  if (!subscription.current_period_end) return true;
+  return new Date(subscription.current_period_end) > new Date();
+}
 
 export default function Login() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const checkoutIntent = searchParams.get("checkout") === "1";
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -33,30 +37,50 @@ export default function Login() {
       return;
     }
 
-    if (checkoutIntent && data.session?.access_token && data.user?.email) {
-      try {
-        const url = await startCheckout({
-          accessToken: data.session.access_token,
-          email: data.user.email,
-          userId: data.user.id,
-        });
+    const user = data.user;
 
-        window.location.href = url;
-        return;
-      } catch (checkoutError: any) {
-        setLoading(false);
-        toast({
-          title: "No se pudo iniciar el pago",
-          description: checkoutError.message ?? "Error inesperado",
-          variant: "destructive",
-        });
-        navigate("/failed");
-        return;
-      }
+    if (!user) {
+      setLoading(false);
+      toast({
+        title: "No se pudo recuperar tu cuenta",
+        description: "Vuelve a intentarlo.",
+        variant: "destructive",
+      });
+      return;
     }
 
+    const [profileResult, subscriptionResult] = await Promise.all([
+      supabase
+        .from("fitness_profiles" as any)
+        .select("onboarding_completed")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("subscriptions")
+        .select("status, current_period_end")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+    ]);
+
     setLoading(false);
-    navigate("/dashboard");
+
+    if (profileResult.error) {
+      console.error("Error cargando onboarding despues del login", profileResult.error);
+    }
+
+    if (subscriptionResult.error) {
+      console.error("Error cargando suscripcion despues del login", subscriptionResult.error);
+    }
+
+    const onboardingCompleted = Boolean((profileResult.data as { onboarding_completed?: boolean } | null)?.onboarding_completed);
+    const hasSubscription = isActiveSubscription((subscriptionResult.data as { current_period_end?: string | null; status?: string | null } | null) ?? null);
+
+    if (!onboardingCompleted) {
+      navigate("/formulario");
+      return;
+    }
+
+    navigate(hasSubscription ? "/dashboard" : "/suscripcion");
   };
 
   return (
@@ -71,7 +95,7 @@ export default function Login() {
         <div className="glass-card rounded-2xl p-8">
           <h1 className="mb-1 font-display text-2xl font-bold">Iniciar sesion</h1>
           <p className="mb-6 text-sm text-muted-foreground">
-            {checkoutIntent ? "Entra para continuar directo al checkout premium" : "Accede a tu plan personalizado"}
+            Entra a tu sistema para continuar con tu onboarding, activar la suscripcion o volver directo al dashboard.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -116,13 +140,13 @@ export default function Login() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Entrando...
                 </>
-              ) : checkoutIntent ? "Entrar y pagar" : "Entrar"}
+              ) : "Entrar"}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             No tienes cuenta?{" "}
-            <Link to={checkoutIntent ? "/registro?checkout=1" : "/registro"} className="font-medium text-primary hover:underline">
+            <Link to="/registro" className="font-medium text-primary hover:underline">
               Registrate
             </Link>
           </p>

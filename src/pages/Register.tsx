@@ -1,20 +1,17 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Dumbbell, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { startCheckout } from "@/lib/checkout";
 
 export default function Register() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
-  const checkoutIntent = searchParams.get("checkout") === "1";
 
   const update = (field: string, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -43,42 +40,20 @@ export default function Register() {
       return;
     }
 
-    if (checkoutIntent && data.session?.access_token && data.user?.email) {
-      try {
-        const url = await startCheckout({
-          accessToken: data.session.access_token,
-          email: data.user.email,
-          userId: data.user.id,
-        });
-
-        window.location.href = url;
-        return;
-      } catch (checkoutError: any) {
-        setLoading(false);
-        toast({
-          title: "No se pudo iniciar el pago",
-          description: checkoutError.message ?? "Error inesperado",
-          variant: "destructive",
-        });
-        navigate("/failed");
-        return;
-      }
-    }
-
     setLoading(false);
 
-    if (checkoutIntent) {
+    if (data.session) {
       toast({
         title: "Cuenta creada",
-        description: "Inicia sesion para continuar con el checkout premium.",
+        description: "Ahora completa tu onboarding premium para construir tu sistema.",
       });
-      navigate("/login?checkout=1");
+      navigate("/formulario");
       return;
     }
 
     toast({
       title: "Cuenta creada",
-      description: "Revisa tu email para confirmar tu cuenta.",
+      description: "Revisa tu email para confirmar tu cuenta y luego entra para completar tu onboarding.",
     });
     navigate("/login");
   };
@@ -95,7 +70,7 @@ export default function Register() {
         <div className="glass-card rounded-2xl p-8">
           <h1 className="mb-1 font-display text-2xl font-bold">Crear cuenta</h1>
           <p className="mb-6 text-sm text-muted-foreground">
-            {checkoutIntent ? "Crea tu cuenta para activar el premium y seguir al pago" : "Comienza tu transformacion hoy"}
+            Crea tu cuenta para empezar el onboarding premium y luego activar la membresia completa.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -153,13 +128,13 @@ export default function Register() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Creando...
                 </>
-              ) : checkoutIntent ? "Crear cuenta y seguir" : "Crear cuenta"}
+              ) : "Crear cuenta"}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Ya tienes cuenta?{" "}
-            <Link to={checkoutIntent ? "/login?checkout=1" : "/login"} className="font-medium text-primary hover:underline">
+            <Link to="/login" className="font-medium text-primary hover:underline">
               Inicia sesion
             </Link>
           </p>
