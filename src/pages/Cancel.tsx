@@ -1,13 +1,19 @@
+import { useEffect } from "react";
 import { XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import PaymentResultLayout from "@/components/PaymentResultLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { startCheckout } from "@/lib/checkout";
 import { toast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 
 export default function CancelPage() {
   const navigate = useNavigate();
   const { session, user } = useAuth();
+
+  useEffect(() => {
+    trackEvent("checkout_cancelled");
+  }, []);
 
   const handleRetry = async () => {
     if (!session?.access_token || !user?.email) {
@@ -16,6 +22,7 @@ export default function CancelPage() {
     }
 
     try {
+      trackEvent("checkout_retry_clicked", { source: "cancel_page" });
       const url = await startCheckout({
         accessToken: session.access_token,
         email: user.email,

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAccessStatus } from "@/hooks/useAccessStatus";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 import { startCheckout } from "@/lib/checkout";
 import heroImage from "@/assets/hero-fitness.jpg";
 
@@ -34,6 +35,15 @@ export default function SubscriptionPage() {
     }
   }, [fromOnboarding, hasActiveSubscription, loading, navigate, onboardingCompleted]);
 
+  useEffect(() => {
+    if (loading || hasActiveSubscription) return;
+
+    trackEvent("paywall_viewed", {
+      from_onboarding: fromOnboarding,
+      onboarding_completed: onboardingCompleted || fromOnboarding,
+    });
+  }, [fromOnboarding, hasActiveSubscription, loading, onboardingCompleted]);
+
   const handleSubscribe = async () => {
     if (!session?.access_token || !user?.email) {
       navigate("/login", { replace: true });
@@ -43,6 +53,10 @@ export default function SubscriptionPage() {
     setCheckoutLoading(true);
 
     try {
+      trackEvent("checkout_started", {
+        source: fromOnboarding ? "paywall_after_onboarding" : "paywall_direct",
+      });
+
       const url = await startCheckout({
         accessToken: session.access_token,
         email: user.email,
@@ -51,6 +65,9 @@ export default function SubscriptionPage() {
 
       window.location.href = url;
     } catch (error: any) {
+      trackEvent("checkout_failed", {
+        source: fromOnboarding ? "paywall_after_onboarding" : "paywall_direct",
+      });
       toast({
         title: "No se pudo iniciar el pago",
         description: error.message ?? "Error inesperado",

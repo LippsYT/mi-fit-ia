@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/lib/analytics";
 
 function isActiveSubscription(subscription: { current_period_end?: string | null; status?: string | null } | null) {
   if (!subscription) return false;
@@ -74,6 +75,13 @@ export default function Login() {
 
     const onboardingCompleted = Boolean((profileResult.data as { onboarding_completed?: boolean } | null)?.onboarding_completed);
     const hasSubscription = isActiveSubscription((subscriptionResult.data as { current_period_end?: string | null; status?: string | null } | null) ?? null);
+    const destination = !onboardingCompleted ? "/formulario" : hasSubscription ? "/dashboard" : "/suscripcion";
+
+    trackEvent("login_success", {
+      destination,
+      has_subscription: hasSubscription,
+      onboarding_completed: onboardingCompleted,
+    });
 
     if (!onboardingCompleted) {
       navigate("/formulario");

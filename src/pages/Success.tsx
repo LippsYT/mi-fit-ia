@@ -1,7 +1,13 @@
+import { useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
 import PaymentResultLayout from "@/components/PaymentResultLayout";
+import { trackEvent } from "@/lib/analytics";
 
 export default function SuccessPage() {
+  useEffect(() => {
+    trackEvent("checkout_success");
+  }, []);
+
   return (
     <PaymentResultLayout
       badge="Pago confirmado"

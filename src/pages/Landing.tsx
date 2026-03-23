@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { useScrollReveal } from "@/hooks/use-scroll-reveal";
 import { useAccessStatus } from "@/hooks/useAccessStatus";
 import { useAuth } from "@/hooks/useAuth";
+import { trackEvent } from "@/lib/analytics";
 import heroImage from "@/assets/hero-fitness.jpg";
 import Navbar from "@/components/Navbar";
 
-type StartOfferHandler = () => Promise<void>;
+type StartOfferHandler = (source: string) => Promise<void>;
 
 function OfferTicker() {
   const tickerItems = [
@@ -76,7 +77,7 @@ function HeroSection({
           </p>
 
           <div data-reveal className="mb-6 flex flex-col gap-3 opacity-0 sm:flex-row">
-            <Button variant="hero" size="xl" onClick={() => void onStart()} disabled={ctaLoading}>
+            <Button variant="hero" size="xl" onClick={() => void onStart("hero_primary")} disabled={ctaLoading}>
               {ctaLoading ? "Cargando..." : ctaLabel}
             </Button>
             <Link to="/login">
@@ -203,7 +204,7 @@ function PricingSection({
               ))}
             </ul>
 
-            <Button variant="hero" size="lg" className="w-full" onClick={() => void onStart()} disabled={ctaLoading}>
+            <Button variant="hero" size="lg" className="w-full" onClick={() => void onStart("pricing_primary")} disabled={ctaLoading}>
               {ctaLoading ? "Cargando..." : ctaLabel}
             </Button>
 
@@ -240,7 +241,7 @@ function CtaSection({
           dificil abandonar la suscripcion.
         </p>
         <div data-reveal className="opacity-0">
-          <Button variant="hero" size="xl" onClick={() => void onStart()} disabled={ctaLoading}>
+          <Button variant="hero" size="xl" onClick={() => void onStart("bottom_cta")} disabled={ctaLoading}>
             {ctaLoading ? "Cargando..." : ctaLabel}
           </Button>
         </div>
@@ -255,10 +256,17 @@ export default function Landing() {
   const { hasActiveSubscription, loading: accessLoading, onboardingCompleted } = useAccessStatus();
   const [ctaLoading, setCtaLoading] = useState(false);
 
-  const handleStartOffer = async () => {
+  const handleStartOffer = async (source: string) => {
     setCtaLoading(true);
 
     try {
+      trackEvent("landing_cta_clicked", {
+        has_subscription: hasActiveSubscription,
+        onboarding_completed: onboardingCompleted,
+        signed_in: Boolean(user),
+        source,
+      });
+
       if (!user) {
         navigate("/registro");
         return;

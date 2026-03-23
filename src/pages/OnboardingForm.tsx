@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAccessStatus } from "@/hooks/useAccessStatus";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 
 const goalOptions = [
   { value: "bajar_grasa", label: "Bajar grasa" },
@@ -231,6 +232,10 @@ export default function OnboardingForm() {
 
   const handleNext = () => {
     if (!validateStep()) return;
+    trackEvent("onboarding_step_completed", {
+      step_index: stepIndex + 1,
+      step_name: currentStep.title,
+    });
     setStepIndex((current) => Math.min(current + 1, stepTitles.length - 1));
   };
 
@@ -326,6 +331,13 @@ export default function OnboardingForm() {
       description: hasActiveSubscription
         ? "Tu perfil premium ya quedo listo para seguir en el dashboard."
         : "Tu perfil premium ya quedo listo. Solo falta activar tu acceso.",
+    });
+
+    trackEvent("onboarding_completed", {
+      goal: form.goal,
+      has_active_subscription: hasActiveSubscription,
+      training_days: Number(form.training_days) || 0,
+      training_type: form.training_type,
     });
 
     navigate(hasActiveSubscription ? "/dashboard" : "/suscripcion?fromOnboarding=1", { replace: true });

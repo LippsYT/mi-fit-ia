@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { trackEvent } from "@/lib/analytics";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -43,6 +44,10 @@ export default function Register() {
     setLoading(false);
 
     if (data.session) {
+      trackEvent("account_created", {
+        email_domain: form.email.split("@")[1] ?? "unknown",
+        has_session: true,
+      });
       toast({
         title: "Cuenta creada",
         description: "Ahora completa tu onboarding premium para construir tu sistema.",
@@ -51,6 +56,10 @@ export default function Register() {
       return;
     }
 
+    trackEvent("account_created", {
+      email_domain: form.email.split("@")[1] ?? "unknown",
+      has_session: false,
+    });
     toast({
       title: "Cuenta creada",
       description: "Revisa tu email para confirmar tu cuenta y luego entra para completar tu onboarding.",
