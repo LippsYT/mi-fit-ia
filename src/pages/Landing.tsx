@@ -15,7 +15,7 @@ function OfferTicker() {
   const tickerItems = [
     "OFERTA POR TIEMPO LIMITADO",
     "ANTES AR$ 35.000",
-    "HOY AR$ 11.499/MES",
+    "HOY AR$ 5.000/MES",
     "SISTEMA DE NUTRICION + ENTRENAMIENTO + IA",
     "AJUSTE SEMANAL Y BLOQUE MENSUAL",
   ];
@@ -89,7 +89,7 @@ function HeroSection({
             <Crown className="h-4 w-4" />
             <span className="font-semibold">Oferta limitada:</span>
             <span className="line-through text-primary/60">AR$ 35.000</span>
-            <span className="font-bold">AR$ 11.499 / mes</span>
+            <span className="font-bold">AR$ 5.000 / mes</span>
           </div>
 
           <div data-reveal className="grid gap-8 text-sm text-muted-foreground opacity-0 sm:grid-cols-4">
@@ -102,7 +102,7 @@ function HeroSection({
               satisfaccion
             </div>
             <div>
-              <span className="block font-display text-2xl font-bold text-foreground tabular-nums">AR$ 11.499</span>
+              <span className="block font-display text-2xl font-bold text-foreground tabular-nums">AR$ 5.000</span>
               precio actual
             </div>
             <div>
@@ -185,7 +185,7 @@ function PricingSection({
             <div className="mb-2 text-sm font-medium uppercase tracking-[0.2em] text-primary">Plan Premium</div>
             <div className="mb-2 text-sm text-muted-foreground line-through">AR$ 35.000 / mes</div>
             <div className="mb-6 flex items-baseline justify-center gap-1">
-              <span className="font-display text-5xl font-bold">AR$ 11.499</span>
+              <span className="font-display text-5xl font-bold">AR$ 5.000</span>
               <span className="text-muted-foreground">/mes</span>
             </div>
 

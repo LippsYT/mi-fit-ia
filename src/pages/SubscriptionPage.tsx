@@ -158,7 +158,7 @@ export default function SubscriptionPage() {
             <div className="mt-8 rounded-3xl border border-primary/20 bg-primary/5 p-6">
               <div className="text-sm text-muted-foreground line-through">Antes AR$ 35.000 / mes</div>
               <div className="mt-3 flex items-end gap-2">
-                <span className="font-display text-5xl font-bold">AR$ 11.499</span>
+                <span className="font-display text-5xl font-bold">AR$ 5.000</span>
                 <span className="pb-2 text-muted-foreground">/ mes</span>
               </div>
               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
